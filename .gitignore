@@ -1,0 +1,7 @@
+node_modules/
+.next/
+.model-cache/
+models/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
