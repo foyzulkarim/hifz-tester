@@ -63,6 +63,30 @@ stall, and the **Tuning** panel to adjust match tolerance.
 
 ---
 
+## Run as a background service (macOS)
+
+If you want the app to keep running after you close the terminal and auto-start
+on boot, use the LaunchAgent. It runs the **production build** (not dev mode):
+
+```bash
+# Build first (re-run after any code change)
+npm run build
+
+# Start the service
+launchctl load ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist
+
+# Stop the service
+launchctl unload ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist
+
+# Check if running
+launchctl list | grep com.foyzul.hifz-tester
+
+# View logs
+tail -f ~/personal/hafiz-ai/hifz-tester/server.log
+```
+
+---
+
 ## Getting real quality: the ASR model
 
 Out of the box, `HIFZ_ASR_MODEL` is unset and the app falls back to a **generic**
