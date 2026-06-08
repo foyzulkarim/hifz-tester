@@ -18,7 +18,7 @@ interruption.
 ```
   browser: record mic ─▶ decode + resample to 16 kHz mono ─▶ POST /api/check
                                                                    │
-   server: Whisper (Quran-fine-tuned, ONNX/transformers.js) ─▶ Arabic text
+   server: Whisper (Quran-fine-tuned, Python via FastAPI on 127.0.0.1) ─▶ text
                                                                    │
            reference ayah text ─▶ normalize ◀── normalize ◀───────┘
                                       │
@@ -26,6 +26,21 @@ interruption.
                                       │
                             per-ayah verdict + pinpointed word ─▶ JSON ─▶ UI
 ```
+
+Two ASR backends ship side by side:
+
+- **`/api/check`** — long-running Python worker (`scripts/asr.py`) communicating
+  with Node over stdin/stdout NDJSON. The default. Lowest deps: just `python3`
+  with `transformers` and `torch`.
+- **`/api/check-fast`** — long-running FastAPI worker (`scripts/asr_fastapi.py`)
+  bound to `http://127.0.0.1:8765`. Same model default, same wire format on the
+  client (raw octet-stream). Use this if you want `curl` for debugging, want
+  to swap models without restarting the Next.js dev server, or want to run
+  multiple Next.js processes against one warm model.
+
+Both backends use the same model by default (`HIFZ_ASR_MODEL`). Both pin
+`stride_length_s=2`, which is critical for the 4-layer turbo decoder — longer
+strides cause infinite repetition loops during silence.
 
 The load-bearing decision: **the verdict is decided in code, never by an LLM.**
 The reference text is known, so this is a *verification* problem. A deterministic
@@ -89,36 +104,52 @@ tail -f ~/personal/hafiz-ai/hifz-tester/server.log
 
 ## Getting real quality: the ASR model
 
-Out of the box, `HIFZ_ASR_MODEL` is unset and the app falls back to a **generic**
-Whisper (`Xenova/whisper-base`) that auto-downloads, so the full loop runs
-immediately for testing. A generic model is trained on conversational Arabic and
-will manufacture false mistakes on melodic recitation — fine for verifying the
-plumbing, not for real use.
+The default model is `tarteel-ai/whisper-base-ar-quran` (a Quran-fine-tuned
+Whisper) for the stdio worker, and `MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix`
+for the FastAPI worker. Both auto-download on first run; both keep warm in
+memory after that. Both pin `stride_length_s=2` to keep the 4-layer turbo
+decoder from entering a repetition loop during silence.
 
-For quality, convert a **Quran-fine-tuned** Whisper to ONNX once and point the app
-at it:
-
-```bash
-# one-time conversion (Python, run anywhere — produces an ONNX model folder)
-git clone https://github.com/huggingface/transformers.js
-cd transformers.js
-pip install -r scripts/requirements.txt
-python -m scripts.convert --quantize --model_id IJyad/whisper-large-v3-Tarteel
-```
-
-This writes the converted model under `models/IJyad/whisper-large-v3-Tarteel/`.
-Copy that folder into this project's `models/` directory, then run with the env
-var set to the folder name (the app resolves it under `./models`):
+Override with `HIFZ_ASR_MODEL`:
 
 ```bash
 HIFZ_ASR_MODEL="IJyad/whisper-large-v3-Tarteel" npm run dev
 ```
 
-The conversion is one-off tooling — it is **not** a Python dependency of the
-running app. Candidate checkpoints (fastest → most accurate): `tarteel-ai/whisper-base-ar-quran`,
-`MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix` (balanced), and
-`IJyad/whisper-large-v3-Tarteel` (max quality — the default suggestion here,
-since you chose accuracy over speed).
+Candidate checkpoints (fastest → most accurate):
+- `tarteel-ai/whisper-base-ar-quran` — small, fast, decent on clean recitation
+- `MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix` — large encoder, 4-layer turbo decoder, **outputs native tashkeel**, balanced
+- `IJyad/whisper-large-v3-Tarteel` — full large-v3, max quality, slowest
+
+> **First run downloads the model.** For the dataset-mix variant that's about
+> 1.5 GB on disk and 30-60s to load into MPS on Apple Silicon. Subsequent
+> restarts reuse the HF cache.
+
+### Running the FastAPI worker
+
+`npm run dev` starts both Next.js and the FastAPI worker in parallel (via
+`concurrently`). If you'd rather start them by hand:
+
+```bash
+# Terminal 1 — FastAPI worker (defaults to 127.0.0.1:8765)
+npm run asr:start
+
+# Terminal 2 — Next.js dev server only
+npm run dev:next-only
+```
+
+The FastAPI worker exposes a readiness probe at `http://127.0.0.1:8765/health`.
+If you want to swap to a UDS transport later, the change is local to
+`scripts/asr_fastapi.py` (add `uvicorn` `--uds` flag) and
+`src/lib/asr-fastapi.ts` (swap the `fetch` for `http.request({ socketPath })`).
+
+### Environment variables
+
+| Var | Default | Used by |
+|---|---|---|
+| `HIFZ_ASR_MODEL` | `tarteel-ai/whisper-base-ar-quran` (stdio) / `MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix` (fastapi) | both workers |
+| `HIFZ_PYTHON` | `python3` | stdio worker (`scripts/asr.py`) |
+| `HIFZ_ASR_FASTAPI_URL` | `http://127.0.0.1:8765/transcribe` | fastapi worker (`scripts/asr_fastapi.py`) |
 
 ---
 
@@ -165,23 +196,30 @@ end over the real Al-Fatihah text. (11 tests.)
 
 ```
 hifz-tester/
-├── data/quran.json              # bundled Quran text (114 surahs) — offline
+├── data/quran-enhanced.json     # bundled Quran text (114 surahs) — offline
+├── scripts/
+│   ├── asr.py                   # stdio NDJSON worker (default backend for /api/check)
+│   └── asr_fastapi.py           # FastAPI worker (backend for /api/check-fast, default for `npm run dev`)
 ├── src/
 │   ├── lib/
 │   │   ├── normalize.ts         # Arabic normalization (both sides of compare)
 │   │   ├── align.ts             # tolerant word-level alignment + the verdict
 │   │   ├── quran.ts             # text loading, range selection, provenance
 │   │   ├── session.ts           # orchestration -> per-ayah report
-│   │   ├── asr.ts               # transformers.js server-side wrapper
+│   │   ├── asr.ts               # stdio NDJSON client (calls scripts/asr.py)
+│   │   ├── asr-fastapi.ts       # HTTP client (calls scripts/asr_fastapi.py)
+│   │   ├── transliteration.ts   # sanitizer for the per-verse transliteration HTML
 │   │   └── types.ts             # shared report types (client + server)
 │   └── app/
 │       ├── page.tsx             # the UI (recording, feedback, luqma, tuning)
 │       ├── layout.tsx, globals.css
-│       └── api/{surahs,check,luqma}/route.ts
-└── tests/core.test.ts           # core logic tests (no model/audio needed)
+│       └── api/{surahs,check,check-fast,luqma}/route.ts
+└── tests/
+    ├── core.test.ts             # core logic + Quran loader + transliteration sanitizer
+    └── asr-fastapi.test.ts      # ASR worker source checks + opt-in integration
 ```
 
-> Keep `data/quran.json` at the project root — the server reads it at runtime.
+> Quran source moved to `quran-enhanced.json` (quran-simple edition + per-ayah Saheeh translation + per-ayah transliteration).
 
 ## Where to take it next
 

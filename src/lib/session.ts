@@ -101,6 +101,7 @@ function computeNextWord(
     ayah: et.ayah,
     wordIndex: et.wordIndex,
     text: words[et.wordIndex] ?? "",
+    transliteration: verseObj?.transliteration,
   };
 }
 
@@ -113,7 +114,15 @@ function groupByAyah(
   const byKey = new Map<string, AyahResult>(
     verses.map((v) => [
       `${v.surah}:${v.ayah}`,
-      { surah: v.surah, ayah: v.ayah, text: v.text, clean: true, notes: [] },
+      {
+        surah: v.surah,
+        ayah: v.ayah,
+        text: v.text,
+        clean: true,
+        notes: [],
+        translation: v.translation,
+        transliteration: v.transliteration,
+      },
     ]),
   );
 

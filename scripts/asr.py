@@ -15,12 +15,16 @@ import sys
 import wave
 
 import numpy as np
+import torch
 from transformers import pipeline
 
 MODEL_ID = sys.argv[1] if len(sys.argv) > 1 else "tarteel-ai/whisper-base-ar-quran"
 
+# Use MPS on Apple Silicon when available (e.g. Mac M4 Pro), otherwise auto.
+_device = "mps" if torch.backends.mps.is_available() else "cpu"
+
 # Load once — this is the slow part.
-asr = pipeline("automatic-speech-recognition", model=MODEL_ID)
+asr = pipeline("automatic-speech-recognition", model=MODEL_ID, device=_device)
 
 # Some fine-tuned Whisper models are missing the timestamp token in their
 # generation config. Patch it so the pipeline does not crash.
@@ -66,7 +70,11 @@ for line in sys.stdin:
             wav_path,
             return_timestamps=False,
             chunk_length_s=30,
-            stride_length_s=5,
+            # CRITICAL for the 4-layer turbo decoder (whisper-l-v3-turbo): keep
+            # stride at 2-3s. Longer strides cause the decoder to lose context
+            # and enter infinite repetition loops during silence. See the
+            # MaddoggProduction model card.
+            stride_length_s=2,
         )
         os.unlink(wav_path)
 

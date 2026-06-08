@@ -3,6 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionReport, SurahInfo, AyahNote } from "@/lib/types";
 
+/** Which ASR backend the next /api/check call should target. */
+type Backend = "stdio" | "fastapi";
+
+const BACKEND_STORAGE_KEY = "hifz.backend";
+
+function loadInitialBackend(): Backend {
+  if (typeof window === "undefined") return "stdio";
+  const stored = window.localStorage.getItem(BACKEND_STORAGE_KEY);
+  return stored === "fastapi" ? "fastapi" : "stdio";
+}
+
+function routeFor(backend: Backend): string {
+  return backend === "fastapi" ? "/api/check-fast" : "/api/check";
+}
+
 /** Decode a recorded blob to mono PCM at 16 kHz (what the ASR expects). */
 async function toMono16k(blob: Blob): Promise<Float32Array> {
   const arr = await blob.arrayBuffer();
@@ -88,6 +103,14 @@ export default function Home() {
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordTime, setRecordTime] = useState(0);
+  // const [backend, setBackend] = useState<Backend>(loadInitialBackend);
+  const backend: Backend = 'fastapi';
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(BACKEND_STORAGE_KEY, backend);
+    }
+  }, [backend]);
 
   const activeReport = report ?? pendingReport;
   const nextWord = activeReport?.nextWord;
@@ -106,8 +129,21 @@ export default function Home() {
     };
   }, [audioUrl]);
 
+  useEffect(() => {
+    // Test-only hook: allows Playwright to inject a mock report without audio.
+    if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__testReport) {
+      setSamples(new Float32Array(1));
+      setReport((window as unknown as Record<string, unknown>).__testReport as SessionReport);
+    }
+  }, []);
+
   const verseCount = useMemo(
     () => surahs.find((s) => s.id === surah)?.verses ?? 7,
+    [surahs, surah],
+  );
+
+  const currentSurah = useMemo(
+    () => surahs.find((s) => s.id === surah),
     [surahs, surah],
   );
 
@@ -191,7 +227,7 @@ export default function Home() {
       to: String(to),
       threshold: String(threshold),
     });
-    const res = await fetch(`/api/check?${qs}`, {
+    const res = await fetch(`${routeFor(backend)}?${qs}`, {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body: new Blob([new Uint8Array(audioSamples.buffer as ArrayBuffer)]),
@@ -242,7 +278,9 @@ export default function Home() {
             <label>Surah</label>
             <select value={surah} onChange={(e) => onSurahChange(Number(e.target.value))}>
               {surahs.map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
+                <option key={s.id} value={s.id}>
+                  {s.id}. {s.name} · {s.meaning}
+                </option>
               ))}
             </select>
           </div>
@@ -291,6 +329,27 @@ export default function Home() {
           <button className="btn-primary" onClick={check} disabled={!samples || busy || transcribing || recording}>
             {busy ? "Listening…" : "Check recitation"}
           </button>
+          {/* <div className="backend-toggle" role="group" aria-label="ASR backend">
+            <span className="backend-toggle-label">Model:</span>
+            <button
+              type="button"
+              className={backend === "stdio" ? "btn-primary backend-btn" : "btn-ghost backend-btn"}
+              onClick={() => setBackend("stdio")}
+              disabled={busy || transcribing || recording}
+              title="tarteel-ai/whisper-base-ar-quran — smaller, faster inference, lower accuracy on melodic recitation"
+            >
+              fast
+            </button>
+            <button
+              type="button"
+              className={backend === "fastapi" ? "btn-primary backend-btn" : "btn-ghost backend-btn"}
+              onClick={() => setBackend("fastapi")}
+              disabled={busy || transcribing || recording}
+              title="MaddoggProduction/whisper-l-v3-turbo-quran-lora — larger, slower inference, outputs native tashkeel, higher accuracy"
+            >
+              slow
+            </button>
+          </div> */}
           {recording && (
             <span className="hint">{MAX_RECORD_SECONDS - recordTime}s remaining</span>
           )}
@@ -330,6 +389,19 @@ export default function Home() {
             </div>
           )}
 
+          {currentSurah && (
+            <div className="report-head">
+              <span className="surah-ar">{currentSurah.nameArabic}</span>
+              <span className="surah-en">{currentSurah.name} · {currentSurah.meaning}</span>
+              <span className={`revelation-badge ${currentSurah.revelationType?.toLowerCase()}`}>
+                {currentSurah.revelationType}
+              </span>
+              {/* <span className="backend-tag" title={`Last check used ${routeFor(backend)}`}>
+                via {backend === "fastapi" ? "slow" : "fast"}
+              </span> */}
+            </div>
+          )}
+
           {report.ayahs.map((a) => {
             const originalWords = a.text.trim().split(/\s+/);
             return (
@@ -339,6 +411,17 @@ export default function Home() {
                   Ayah {a.ayah} {a.clean ? "· clean" : "· needs review"}
                 </div>
                 <AyahText text={a.text} notes={a.notes} />
+                {a.translation && (
+                  <div className="ayah-translation">{a.translation}</div>
+                )}
+                {a.transliteration && (
+                  <div
+                    className="ayah-transliteration"
+                    // Input is server-sanitized at load time by sanitizeTranslit(),
+                    // which allowlists tag names and rejects attributes.
+                    dangerouslySetInnerHTML={{ __html: a.transliteration }}
+                  />
+                )}
                 {!a.clean && (
                   <ul className="notes">
                     {a.notes.map((n, i) => (
@@ -359,6 +442,12 @@ export default function Home() {
             <div className="actions" style={{ flexWrap: "nowrap" }}>
               <span className="hint">Next word:</span>
               <span className="big-ar">{nextWord.text}</span>
+              {nextWord.transliteration && (
+                <span
+                  className="luqma-translit"
+                  dangerouslySetInnerHTML={{ __html: nextWord.transliteration }}
+                />
+              )}
               <span className="hint">
                 Ayah {nextWord.ayah}, word {nextWord.wordIndex + 1}
               </span>

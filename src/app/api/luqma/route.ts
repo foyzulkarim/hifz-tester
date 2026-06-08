@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { luqma } from "@/lib/session";
+import { verse } from "@/lib/quran";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,8 @@ export function GET(req: NextRequest) {
   }
   try {
     const text = luqma(surah, ayah, Math.max(0, word - 1), count);
-    return NextResponse.json({ text });
+    const transliteration = verse(surah, ayah).transliteration;
+    return NextResponse.json({ text, transliteration });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
