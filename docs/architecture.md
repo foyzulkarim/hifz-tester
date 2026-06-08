@@ -92,10 +92,17 @@ this behind one identical TypeScript contract
 (`transcribe(samples: Float32Array): Promise<string>`):
 
 - **stdio NDJSON** (`asr.ts` ↔ `asr.py`) — lowest dependencies, Node owns the
-  child process lifecycle. Default for `/api/check`.
+  child process lifecycle. Serves `/api/check`; default model
+  `tarteel-ai/whisper-base-ar-quran`.
 - **FastAPI loopback** (`asr-fastapi.ts` ↔ `asr_fastapi.py`) — decoupled
-  lifecycle, `curl`-debuggable, shareable across processes. Default for
-  `npm run dev` and `/api/check-fast`.
+  lifecycle, `curl`-debuggable, shareable across processes. Serves
+  `/api/check-fast`; default model
+  `MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix`.
+
+> **Currently live:** the UI pins the backend to `fastapi`
+> (`src/app/page.tsx`), so every recitation today is served by `/api/check-fast`
+> and the MaddoggProduction turbo model. The stdio path is wired and tested but
+> unreachable from the UI until the commented-out backend toggle is restored.
 
 The full rationale, wire protocols, robustness details, and a scalability
 analysis live in [`node-python-ipc.md`](./node-python-ipc.md).

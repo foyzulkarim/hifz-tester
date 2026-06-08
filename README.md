@@ -29,18 +29,23 @@ interruption.
 
 Two ASR backends ship side by side:
 
-- **`/api/check`** — long-running Python worker (`scripts/asr.py`) communicating
-  with Node over stdin/stdout NDJSON. The default. Lowest deps: just `python3`
-  with `transformers` and `torch`.
 - **`/api/check-fast`** — long-running FastAPI worker (`scripts/asr_fastapi.py`)
-  bound to `http://127.0.0.1:8765`. Same model default, same wire format on the
-  client (raw octet-stream). Use this if you want `curl` for debugging, want
-  to swap models without restarting the Next.js dev server, or want to run
-  multiple Next.js processes against one warm model.
+  bound to `http://127.0.0.1:8765`. **This is what the UI calls today** — the
+  client backend is currently pinned to `fastapi` in `src/app/page.tsx`, so the
+  model actually serving recitations is its default,
+  `MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix`. It also lets you
+  `curl` for debugging, swap models without restarting Next.js, and run multiple
+  Next.js processes against one warm model.
+- **`/api/check`** — long-running Python worker (`scripts/asr.py`) communicating
+  with Node over stdin/stdout NDJSON. Lowest deps (just `python3` with
+  `transformers` and `torch`) and its default model is the smaller
+  `tarteel-ai/whisper-base-ar-quran`. Fully wired and tested, but **not reachable
+  from the UI right now** — the in-app backend toggle is commented out. Hit the
+  route directly, or re-enable the toggle, to use it.
 
-Both backends use the same model by default (`HIFZ_ASR_MODEL`). Both pin
-`stride_length_s=2`, which is critical for the 4-layer turbo decoder — longer
-strides cause infinite repetition loops during silence.
+Each backend has its own default model (above); either is overridden by
+`HIFZ_ASR_MODEL`. Both pin `stride_length_s=2`, which is critical for the 4-layer
+turbo decoder — longer strides cause infinite repetition loops during silence.
 
 The load-bearing decision: **the verdict is decided in code, never by an LLM.**
 The reference text is known, so this is a *verification* problem. A deterministic

@@ -20,8 +20,15 @@ export async function transcribe(samples: Float32Array): Promise<string>;
 
 Because the signature is identical, the alignment engine and API routes don't
 know or care which backend is live. Swapping is a one-line import change
-(`@/lib/asr` ↔ `@/lib/asr-fastapi`), and the UI toggles between them per request
-by hitting `/api/check` vs `/api/check-fast`.
+(`@/lib/asr` ↔ `@/lib/asr-fastapi`), and the route chosen per request is just
+`/api/check` vs `/api/check-fast`.
+
+> **What's live today:** the client backend is currently pinned to `fastapi`
+> (`const backend: Backend = 'fastapi'` in `src/app/page.tsx`; the state hook and
+> the fast/slow toggle UI are commented out). So every recitation goes through
+> `/api/check-fast` and the **`MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix`**
+> model. The stdio path below is fully functional but unreachable from the UI
+> until the toggle is restored.
 
 | | stdio worker | FastAPI worker |
 |---|---|---|
@@ -31,7 +38,8 @@ by hitting `/api/check` vs `/api/check-fast`.
 | Audio payload | temp `.raw` file, path sent over pipe | raw octet-stream request body |
 | Deps | `transformers`, `torch`, `numpy` | + `fastapi`, `uvicorn` |
 | Debuggable with `curl` | no | yes (`/health`, `/transcribe`) |
-| Default for | `/api/check` (lowest deps) | `npm run dev`, `/api/check-fast` |
+| Default model | `tarteel-ai/whisper-base-ar-quran` | `MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix` |
+| Used by | `/api/check` (not reachable from UI today) | `/api/check-fast` (**what the UI calls now**), `npm run dev` |
 
 ---
 
