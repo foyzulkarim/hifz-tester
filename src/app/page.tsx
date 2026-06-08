@@ -131,6 +131,10 @@ export default function Home() {
 
   useEffect(() => {
     // Test-only hook: allows Playwright to inject a mock report without audio.
+    // Gated to non-production so the prod bundle doesn't carry a state-mutation
+    // escape hatch. Dev (npm run dev) and Playwright both see the hook; the
+    // production build drops the branch entirely.
+    if (process.env.NODE_ENV === "production") return;
     if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__testReport) {
       setSamples(new Float32Array(1));
       setReport((window as unknown as Record<string, unknown>).__testReport as SessionReport);

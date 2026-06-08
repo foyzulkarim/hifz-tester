@@ -65,21 +65,28 @@ for line in sys.stdin:
 
         samples = np.fromfile(audio_path, dtype=np.float32)
         wav_path = audio_path + ".wav"
-        write_wav(wav_path, samples)
-        result = asr(
-            wav_path,
-            return_timestamps=False,
-            chunk_length_s=30,
-            # CRITICAL for the 4-layer turbo decoder (whisper-l-v3-turbo): keep
-            # stride at 2-3s. Longer strides cause the decoder to lose context
-            # and enter infinite repetition loops during silence. See the
-            # MaddoggProduction model card.
-            stride_length_s=2,
-        )
-        os.unlink(wav_path)
-
-        text = result["text"] if isinstance(result, dict) else result[0]["text"]
-        resp = {"_reqId": req_id, "text": text.strip()}
+        try:
+            write_wav(wav_path, samples)
+            result = asr(
+                wav_path,
+                return_timestamps=False,
+                chunk_length_s=30,
+                # CRITICAL for the 4-layer turbo decoder (whisper-l-v3-turbo): keep
+                # stride at 2-3s. Longer strides cause the decoder to lose context
+                # and enter infinite repetition loops during silence. See the
+                # MaddoggProduction model card.
+                stride_length_s=2,
+            )
+            text = result["text"] if isinstance(result, dict) else result[0]["text"]
+            resp = {"_reqId": req_id, "text": text.strip()}
+        finally:
+            # Best-effort cleanup; an exception during asr() must not leave
+            # the WAV behind in /tmp. The Node side cleans up the .raw file
+            # independently.
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
     except Exception as e:
         resp = {"_reqId": req.get("_reqId"), "error": str(e)}
 

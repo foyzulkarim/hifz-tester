@@ -97,6 +97,17 @@ test("scripts/asr.py: stride_length_s is 2 (not the old 5)", () => {
   assert.doesNotMatch(src, /stride_length_s\s*=\s*5/);
 });
 
+test("scripts/asr.py: cleans up the .wav temp file in a try/finally", () => {
+  // The stdio worker writes a .wav next to the .raw on every request. If
+  // the asr() call raises, that .wav would otherwise leak in /tmp
+  // indefinitely. The FastAPI worker uses tempfile.mkstemp with its own
+  // try/finally; the stdio worker must do the same for the sibling-of-raw
+  // path it uses.
+  const src = fs.readFileSync(STDIO_WORKER_PATH, "utf-8");
+  assert.match(src, /finally:/, "stdio worker must use try/finally for the wav cleanup");
+  assert.match(src, /os\.unlink\(wav_path\)/);
+});
+
 // --- static: Node client source ---
 test("asr-fastapi.ts: targets loopback HTTP by default", () => {
   const src = fs.readFileSync(CLIENT_PATH, "utf-8");

@@ -128,7 +128,17 @@ Candidate checkpoints (fastest → most accurate):
 ### Running the FastAPI worker
 
 `npm run dev` starts both Next.js and the FastAPI worker in parallel (via
-`concurrently`). If you'd rather start them by hand:
+`concurrently`). The stdio worker (`scripts/asr.py`) only needs `transformers`
++ `torch` + `numpy`. The FastAPI worker additionally needs `fastapi` and
+`uvicorn`:
+
+```bash
+pip install fastapi uvicorn transformers torch numpy
+```
+
+(If you only use the stdio worker you can skip `fastapi` and `uvicorn`.)
+
+If you'd rather start the two processes by hand:
 
 ```bash
 # Terminal 1 — FastAPI worker (defaults to 127.0.0.1:8765)
