@@ -105,7 +105,10 @@ this behind one identical TypeScript contract
 > unreachable from the UI until the commented-out backend toggle is restored.
 
 The full rationale, wire protocols, robustness details, and a scalability
-analysis live in [`node-python-ipc.md`](./node-python-ipc.md).
+analysis live in [`node-python-ipc.md`](./node-python-ipc.md). The *evolution* of
+this decision — per-request spawn → long-lived stdio child → FastAPI over TCP
+loopback, and why each step was taken — is recorded in
+[ADR 0001](./adr/0001-node-python-asr-bridge.md).
 
 ## Scope and non-goals
 

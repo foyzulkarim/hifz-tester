@@ -66,6 +66,11 @@ fumbling a *correct* word rather than flagging you.
   Python from Node: the two interop patterns (stdio NDJSON and FastAPI
   loopback), their wire protocols, robustness handling, and an honest
   scalability analysis. This is the most interesting engineering in the repo.
+- **[docs/adr/](docs/adr/)** — Architecture Decision Records: *why* the design is
+  the way it is. Start with
+  [ADR 0001 — how Node calls the Python ASR model](docs/adr/0001-node-python-asr-bridge.md),
+  which traces the evolution from per-request spawn → long-lived stdio child →
+  FastAPI over TCP loopback, and why each step was taken.
 
 ---
 
