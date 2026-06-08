@@ -14,7 +14,7 @@
  */
 
 import { Op, OpKind, align } from "./align";
-import { tokenize } from "./normalize";
+import { normalizeToken, tokenize } from "./normalize";
 import { ExpectedToken, Verse, expectedTokens, range, verse } from "./quran";
 import type { AyahNote, AyahResult, NextWordHint, SessionReport } from "./types";
 
@@ -22,6 +22,27 @@ export type { AyahNote, AyahResult, NextWordHint, SessionReport } from "./types"
 
 function noteFrom(op: Op, wordIndex: number | null): AyahNote {
   return { kind: op.kind, wordIndex, expected: op.expected, heard: op.heard };
+}
+
+/**
+ * Map normalized heard words back to their original transcript form (with harakat).
+ * alignment works on stripped tokens; the UI should show the diacritized words
+ * the ASR actually emitted so non-Arabic readers can pronounce them.
+ */
+function restoreHeardWords(ops: Op[], transcript: string): Op[] {
+  const originalWords = transcript.trim().split(/\s+/).filter((w) => w.length > 0);
+  const normalizedWords = originalWords.map((w) => normalizeToken(w));
+  const used = new Set<number>();
+
+  return ops.map((op) => {
+    if (!op.heard) return op;
+    const idx = normalizedWords.findIndex((n, i) => n === op.heard && !used.has(i));
+    if (idx >= 0) {
+      used.add(idx);
+      return { ...op, heard: originalWords[idx] };
+    }
+    return op;
+  });
 }
 
 export function evaluate(
@@ -35,10 +56,13 @@ export function evaluate(
   const expected = expectedTokens(verses);
   const heard = tokenize(transcript);
 
-  const ops = align(
-    expected.map((e) => e.token),
-    heard,
-    similarityThreshold,
+  const ops = restoreHeardWords(
+    align(
+      expected.map((e) => e.token),
+      heard,
+      similarityThreshold,
+    ),
+    transcript,
   );
 
   const ayahs = groupByAyah(verses, expected, ops);

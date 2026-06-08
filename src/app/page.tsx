@@ -76,7 +76,7 @@ export default function Home() {
   const [surah, setSurah] = useState(1);
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(7);
-  const [threshold, setThreshold] = useState(0.8);
+  const [threshold, setThreshold] = useState(0.5);
 
   const [recording, setRecording] = useState(false);
   const [samples, setSamples] = useState<Float32Array | null>(null);
@@ -86,12 +86,25 @@ export default function Home() {
   const [pendingReport, setPendingReport] = useState<SessionReport | null>(null);
   const [previewTranscript, setPreviewTranscript] = useState("");
   const [error, setError] = useState("");
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [recordTime, setRecordTime] = useState(0);
 
   const activeReport = report ?? pendingReport;
   const nextWord = activeReport?.nextWord;
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const MAX_RECORD_SECONDS = 30;
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [audioUrl]);
 
   const verseCount = useMemo(
     () => surahs.find((s) => s.id === surah)?.verses ?? 7,
@@ -118,6 +131,7 @@ export default function Home() {
     setReport(null);
     setPendingReport(null);
     setPreviewTranscript("");
+    setAudioUrl(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
@@ -126,6 +140,7 @@ export default function Home() {
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+        setAudioUrl(URL.createObjectURL(blob));
         try {
           const decodedSamples = await toMono16k(blob);
           setSamples(decodedSamples);
@@ -145,12 +160,26 @@ export default function Home() {
       rec.start();
       recorderRef.current = rec;
       setRecording(true);
+      setRecordTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordTime((t) => {
+          if (t + 1 >= MAX_RECORD_SECONDS) {
+            stopRecording();
+            return t + 1;
+          }
+          return t + 1;
+        });
+      }, 1000);
     } catch {
       setError("Microphone access was denied or unavailable.");
     }
   }
 
   function stopRecording() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     recorderRef.current?.stop();
     setRecording(false);
   }
@@ -256,17 +285,27 @@ export default function Home() {
             </button>
           ) : (
             <button className="btn-rec recording" onClick={stopRecording}>
-              ■ Stop
+              ■ Stop {recordTime > 0 && `(${recordTime}s / ${MAX_RECORD_SECONDS}s)`}
             </button>
           )}
           <button className="btn-primary" onClick={check} disabled={!samples || busy || transcribing || recording}>
             {busy ? "Listening…" : "Check recitation"}
           </button>
+          {recording && (
+            <span className="hint">{MAX_RECORD_SECONDS - recordTime}s remaining</span>
+          )}
           {samples && !recording && !busy && !transcribing && !previewTranscript && (
             <span className="hint">Recording ready.</span>
           )}
           {transcribing && <span className="hint">Transcribing…</span>}
         </div>
+
+        {audioUrl && !recording && (
+          <div className="playback">
+            <label>Playback your recording</label>
+            <audio ref={audioRef} controls src={audioUrl} preload="metadata" />
+          </div>
+        )}
 
         {previewTranscript && !report && (
           <div className="transcript">

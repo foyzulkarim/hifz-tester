@@ -10,7 +10,11 @@
     "start:3010": "PORT=3010 next start",
     "lint": "next lint",
     "test": "tsx tests/core.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "service:start": "launchctl load ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist",
+    "service:stop": "launchctl unload ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist",
+    "service:restart": "npm run service:stop && npm run build && npm run service:start",
+    "logs": "tail -f /Users/foyzul/personal/hafiz-ai/hifz-tester/server.log"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.3.0",

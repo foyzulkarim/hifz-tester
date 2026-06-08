@@ -107,6 +107,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .hint { color: var(--ink-soft); font-size: 0.9rem; }
+.playback { margin-top: 4px; }
+.playback audio { width: 100%; display: block; }
 
 .summary {
   border-radius: var(--radius);
