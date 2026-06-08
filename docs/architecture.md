@@ -5,8 +5,8 @@ in hifz (Quran memorization): you recite a chosen ayah range, it transcribes you
 on the server, and it tells you — at the level of the individual word — whether
 you were correct or exactly where you slipped.
 
-This document covers the system shape and the two design decisions that carry the
-project. For the Node↔Python bridge specifically, see
+This document is the map of the system as it stands. The Node↔Python speech
+bridge — the most interesting part — has its own write-up in
 [`node-python-ipc.md`](./node-python-ipc.md).
 
 ## Data flow
@@ -44,7 +44,7 @@ model expects, regardless of the user's mic sample rate.
 
 | Layer | File | Responsibility |
 |---|---|---|
-| UI | `src/app/page.tsx` | record, decode/resample, backend toggle, render report, luqma + tuning panels |
+| UI | `src/app/page.tsx` | record, decode/resample, render report, luqma + tuning panels |
 | API | `src/app/api/check/route.ts` | stdio backend endpoint |
 | API | `src/app/api/check-fast/route.ts` | FastAPI backend endpoint |
 | API | `src/app/api/{surahs,luqma}/route.ts` | surah list; manual next-word hint |
@@ -84,30 +84,18 @@ report — never the judge.
 This is what makes the core trustworthy and fully unit-tested
 (`tests/core.test.ts`) with no model and no audio.
 
-## Load-bearing decision #2 — warm model behind a swappable transport
+## Load-bearing decision #2 — a warm Python model behind a stable seam
 
-The model is expensive to load (30–60s, ~1.5 GB), so it loads **once** in a
-long-lived Python worker and stays warm. Two interchangeable workers implement
-this behind one identical TypeScript contract
-(`transcribe(samples: Float32Array): Promise<string>`):
+The speech model is expensive to load (30–60s, ~1.5 GB), so it loads **once** in
+a long-lived Python worker and stays warm. Node calls it behind a single
+TypeScript contract — `transcribe(samples: Float32Array): Promise<string>` — so
+the transport underneath can change without touching any caller. The live
+transport is a FastAPI worker over TCP loopback (`/api/check-fast`); a classic
+stdio child worker (`/api/check`) ships as a zero-dependency fallback.
 
-- **stdio NDJSON** (`asr.ts` ↔ `asr.py`) — lowest dependencies, Node owns the
-  child process lifecycle. Serves `/api/check`; default model
-  `tarteel-ai/whisper-base-ar-quran`.
-- **FastAPI loopback** (`asr-fastapi.ts` ↔ `asr_fastapi.py`) — decoupled
-  lifecycle, `curl`-debuggable, shareable across processes. Serves
-  `/api/check-fast`; default model
-  `MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix`.
-
-> **Currently live:** the UI pins the backend to `fastapi`
-> (`src/app/page.tsx`), so every recitation today is served by `/api/check-fast`
-> and the MaddoggProduction turbo model. The stdio path is wired and tested but
-> unreachable from the UI until the commented-out backend toggle is restored.
-
-The full rationale, wire protocols, robustness details, and a scalability
-analysis live in [`node-python-ipc.md`](./node-python-ipc.md). The *why* behind
-the decision — the forces, the benefits, and the alternatives rejected — is
-recorded in [ADR 0001](./adr/0001-node-python-asr-bridge.md).
+Why this matters, what TCP buys over spawning Python per request, and how the
+stdio fallback works are covered in
+[`node-python-ipc.md`](./node-python-ipc.md).
 
 ## Scope and non-goals
 
@@ -115,6 +103,3 @@ recorded in [ADR 0001](./adr/0001-node-python-asr-bridge.md).
 - **Record-then-review**, not live interruption.
 - **Single local user** — loopback only, no auth, no multi-tenancy.
 - **Hafs ʿan ʿĀsim**, plain-script reference (diacritics ignored for matching).
-
-See the README's "Honest limitations" and "Where to take it next" for the
-roadmap (live streaming mode, warmer LLM phrasing, in-browser WebGPU ASR).
