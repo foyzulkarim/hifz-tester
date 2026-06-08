@@ -26,7 +26,7 @@ const SHARE_TEXT =
 
 // TODO: paste your Google Form link here to enable the Feedback button.
 // While empty, the button renders disabled.
-const FEEDBACK_URL = "";
+const FEEDBACK_URL = "https://forms.gle/Bz43wsNVWihxaBnC7";
 
 /** Social targets for the Share popup. Each opens in a small window. */
 const SHARE_TARGETS: Array<{ name: string; href: string }> = [
