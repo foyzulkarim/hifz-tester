@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="760" viewBox="0 0 900 760" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <style>
+    .lane    { fill: none; stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 6 4; rx: 12; }
+    .laneLbl { fill: #64748b; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .box     { rx: 8; stroke-width: 1.5; }
+    .boxTitle{ font-size: 13.5px; font-weight: 700; }
+    .boxSub  { font-size: 11.5px; }
+    .edge    { stroke: #475569; stroke-width: 1.6; fill: none; }
+    .edgeBlue{ stroke: #2563eb; stroke-width: 1.8; fill: none; }
+    .edgeLbl { fill: #475569; font-size: 11px; font-weight: 600; }
+    .edgeLblBlue { fill: #2563eb; font-size: 11px; font-weight: 700; }
+  </style>
+
+  <!-- ===================== BROWSER LANE ===================== -->
+  <rect class="lane" x="20" y="20" width="270" height="720"/>
+  <text class="laneLbl" x="40" y="48">Browser</text>
+
+  <!-- mic record -->
+  <rect class="box" x="55" y="70" width="200" height="54" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="boxTitle" x="155" y="93" text-anchor="middle" fill="#1e3a8a">🎙 mic record</text>
+  <text class="boxSub" x="155" y="111" text-anchor="middle" fill="#475569">capture recitation</text>
+
+  <!-- decode + resample -->
+  <rect class="box" x="55" y="160" width="200" height="68" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="boxTitle" x="155" y="184" text-anchor="middle" fill="#1e3a8a">decode + resample</text>
+  <text class="boxSub" x="155" y="202" text-anchor="middle" fill="#475569">→ 16 kHz mono PCM</text>
+  <text class="boxSub" x="155" y="218" text-anchor="middle" fill="#94a3b8">OfflineAudioContext</text>
+
+  <!-- reference text (bottom of browser lane) -->
+  <rect class="box" x="55" y="630" width="200" height="68" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text class="boxTitle" x="155" y="654" text-anchor="middle" fill="#5b21b6">reference ayah text</text>
+  <text class="boxSub" x="155" y="672" text-anchor="middle" fill="#475569">data/quran-enhanced.json</text>
+  <text class="boxSub" x="155" y="688" text-anchor="middle" fill="#94a3b8">114 surahs, offline</text>
+
+  <!-- browser internal edges -->
+  <line class="edge" x1="155" y1="124" x2="155" y2="158" marker-end="url(#arrow)"/>
+
+  <!-- ===================== SERVER LANE ===================== -->
+  <rect class="lane" x="320" y="20" width="560" height="720"/>
+  <text class="laneLbl" x="340" y="48">Server — Next.js (Node runtime)</text>
+
+  <!-- POST arrow from browser to server -->
+  <path class="edgeBlue" d="M 255 194 H 360" marker-end="url(#arrowBlue)"/>
+  <text class="edgeLblBlue" x="307" y="186" text-anchor="middle">POST raw PCM</text>
+
+  <!-- API entry: two endpoints -->
+  <rect class="box" x="360" y="160" width="230" height="60" fill="#f0fdf4" stroke="#86efac"/>
+  <text class="boxTitle" x="475" y="183" text-anchor="middle" fill="#166534">/api/check-fast  ·  /api/check</text>
+  <text class="boxSub" x="475" y="201" text-anchor="middle" fill="#475569">route handlers</text>
+
+  <!-- Path A: FastAPI (live) -->
+  <rect class="box" x="345" y="270" width="245" height="86" fill="#fff7ed" stroke="#fdba74"/>
+  <text class="boxTitle" x="467" y="292" text-anchor="middle" fill="#9a3412">asr-fastapi.ts ▸ HTTP</text>
+  <text class="boxSub" x="467" y="310" text-anchor="middle" fill="#475569">127.0.0.1:8765</text>
+  <text class="boxSub" x="467" y="328" text-anchor="middle" fill="#475569">scripts/asr_fastapi.py</text>
+  <text class="boxSub" x="467" y="344" text-anchor="middle" fill="#16a34a" font-weight="700">warm Whisper · LIVE</text>
+
+  <!-- Path B: stdio (wired, not live) -->
+  <rect class="box" x="615" y="270" width="245" height="86" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="5 3"/>
+  <text class="boxTitle" x="737" y="292" text-anchor="middle" fill="#475569">asr.ts ▸ stdio NDJSON</text>
+  <text class="boxSub" x="737" y="310" text-anchor="middle" fill="#64748b">child process</text>
+  <text class="boxSub" x="737" y="328" text-anchor="middle" fill="#64748b">scripts/asr.py</text>
+  <text class="boxSub" x="737" y="344" text-anchor="middle" fill="#94a3b8" font-weight="700">warm Whisper · wired</text>
+
+  <!-- endpoint -> two backends -->
+  <path class="edge" d="M 467 220 V 268" marker-end="url(#arrow)"/>
+  <path class="edge" d="M 540 220 H 737 V 268" marker-end="url(#arrow)" stroke-dasharray="5 3"/>
+
+  <!-- transcript -->
+  <rect class="box" x="360" y="400" width="230" height="54" fill="#fefce8" stroke="#fde047"/>
+  <text class="boxTitle" x="475" y="423" text-anchor="middle" fill="#854d0e">transcript</text>
+  <text class="boxSub" x="475" y="441" text-anchor="middle" fill="#475569">Arabic text from ASR</text>
+
+  <path class="edge" d="M 467 356 V 398" marker-end="url(#arrow)"/>
+
+  <!-- normalize (both sides) -->
+  <rect class="box" x="360" y="480" width="230" height="54" fill="#ecfeff" stroke="#67e8f9"/>
+  <text class="boxTitle" x="475" y="503" text-anchor="middle" fill="#155e75">normalize</text>
+  <text class="boxSub" x="475" y="521" text-anchor="middle" fill="#475569">applied to both sides</text>
+
+  <path class="edge" d="M 475 454 V 478" marker-end="url(#arrow)"/>
+  <!-- reference text feeds normalize -->
+  <path class="edge" d="M 255 664 H 310 V 507 H 358" marker-end="url(#arrow)"/>
+  <text class="edgeLbl" x="300" y="500" text-anchor="middle">reference</text>
+
+  <!-- align -->
+  <rect class="box" x="360" y="560" width="230" height="54" fill="#ecfeff" stroke="#67e8f9"/>
+  <text class="boxTitle" x="475" y="583" text-anchor="middle" fill="#155e75">align</text>
+  <text class="boxSub" x="475" y="601" text-anchor="middle" fill="#475569">deterministic · tolerant LCS</text>
+
+  <path class="edge" d="M 475 534 V 558" marker-end="url(#arrow)"/>
+
+  <!-- verdict -->
+  <rect class="box" x="360" y="640" width="230" height="68" fill="#ecfeff" stroke="#67e8f9"/>
+  <text class="boxTitle" x="475" y="663" text-anchor="middle" fill="#155e75">per-ayah verdict</text>
+  <text class="boxSub" x="475" y="681" text-anchor="middle" fill="#475569">+ pinpointed word</text>
+  <text class="boxSub" x="475" y="697" text-anchor="middle" fill="#475569">+ next-word hint</text>
+
+  <path class="edge" d="M 475 614 V 638" marker-end="url(#arrow)"/>
+
+  <!-- SessionReport -> UI -->
+  <rect class="box" x="640" y="647" width="200" height="54" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="boxTitle" x="740" y="670" text-anchor="middle" fill="#1e3a8a">SessionReport JSON</text>
+  <text class="boxSub" x="740" y="688" text-anchor="middle" fill="#475569">▸ rendered in UI</text>
+
+  <path class="edgeBlue" d="M 590 674 H 638" marker-end="url(#arrowBlue)"/>
+
+  <!-- legend -->
+  <text x="640" y="430" class="boxSub" fill="#64748b" font-weight="700">Legend</text>
+  <rect x="640" y="440" width="14" height="14" rx="3" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="662" y="451" class="boxSub" fill="#475569">live ASR path</text>
+  <rect x="640" y="462" width="14" height="14" rx="3" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="5 3"/>
+  <text x="662" y="473" class="boxSub" fill="#475569">wired, not live</text>
+  <rect x="640" y="484" width="14" height="14" rx="3" fill="#ecfeff" stroke="#67e8f9"/>
+  <text x="662" y="495" class="boxSub" fill="#475569">deterministic engine (no LLM)</text>
+</svg>

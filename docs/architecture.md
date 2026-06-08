@@ -11,6 +11,14 @@ bridge — the most interesting part — has its own write-up in
 
 ## Data flow
 
+![Data flow: the browser records and resamples audio, POSTs raw PCM to the
+server, one of two warm-Whisper ASR backends transcribes it, and a deterministic
+engine normalizes + aligns the transcript against the reference ayah to produce
+a per-ayah verdict rendered in the UI.](./data-flow.svg)
+
+<details>
+<summary>Same diagram as ASCII text</summary>
+
 ```
   browser                         server (Next.js, Node runtime)
   ───────                         ──────────────────────────────
@@ -33,6 +41,8 @@ bridge — the most interesting part — has its own write-up in
                                                │
                                        SessionReport JSON ─▶ UI
 ```
+
+</details>
 
 The client is a single React page (`src/app/page.tsx`). It records from the mic,
 decodes and resamples the blob to **mono 16 kHz float32 PCM** in the browser
