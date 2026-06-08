@@ -120,6 +120,23 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .summary.clean { background: var(--green-soft); color: var(--clean); }
 .summary.flagged { background: var(--flag-soft); color: var(--flag); }
 
+.report-head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 14px 0 18px; border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+.report-head .surah-ar { font-family: var(--font-arabic); font-size: 1.6rem; }
+.report-head .surah-en { color: var(--ink-soft); font-size: 0.95rem; }
+
+.revelation-badge {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink-soft);
+  background: var(--paper);
+}
+.revelation-badge.meccan  { color: var(--amber); border-color: #e8d6b0; background: #fbf3e1; }
+.revelation-badge.medinan { color: var(--green); border-color: #c6dfd0; background: var(--green-soft); }
+
 .ayah {
   border-left: 3px solid var(--line);
   padding: 14px 0 14px 18px;
@@ -163,10 +180,53 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   text-decoration-thickness: 2px;
 }
 
+.ayah-translation {
+  font-size: 0.92rem; color: var(--ink-soft);
+  margin-top: 6px; line-height: 1.45;
+}
+.ayah-transliteration {
+  font-size: 0.88rem; color: var(--ink-soft);
+  margin-top: 4px; opacity: 0.85; font-style: italic;
+}
+.ayah-transliteration .tajweed-em     { text-decoration: underline; text-decoration-color: var(--amber); }
+.ayah-transliteration .tajweed-heavy  { font-weight: 600; color: var(--ink); }
+.ayah-transliteration .tajweed-i      { font-style: italic; }
+.ayah-transliteration .tajweed-strong { font-weight: 700; }
+
 .transcript {
   margin-top: 6px; font-size: 0.92rem; color: var(--ink-soft);
 }
 .transcript .ar { font-family: var(--font-arabic), serif; direction: rtl; font-size: 1.15rem; }
+
+.luqma-translit {
+  font-size: 0.9rem; color: var(--ink-soft);
+  margin-left: 4px; font-style: italic;
+}
+
+.backend-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--paper);
+}
+.backend-toggle-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+.backend-btn {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.02em;
+}
+.backend-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.backend-tag {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink-soft);
+  background: var(--paper);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
 
 details { margin-top: 28px; }
 summary { cursor: pointer; color: var(--ink-soft); font-family: var(--font-display), serif; }

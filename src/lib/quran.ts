@@ -10,12 +10,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { tokenize } from "./normalize";
+import { sanitizeTranslit } from "./transliteration";
 
 export interface Verse {
   surah: number;
   ayah: number;
   text: string; // original (with diacritics), for display
   transliteration: string;
+  translation?: string;
 }
 
 export interface ExpectedToken {
@@ -25,47 +27,103 @@ export interface ExpectedToken {
   token: string; // normalized
 }
 
-interface RawVerse { id: number; text: string; transliteration?: string }
+interface RawVerse {
+  number: number;
+  arabic: string;
+  translations: Record<string, string>;
+}
+
 interface RawChapter {
   id: number;
   name: string;
-  transliteration: string;
-  type: string;
-  total_verses: number;
+  nameArabic: string;
+  meaning: string;
+  verseCount: number;
+  revelationType: string;
   verses: RawVerse[];
 }
 
-const DATA_PATH = path.join(process.cwd(), "data", "quran.json");
+interface QuranData {
+  meta: unknown;
+  surahs: RawChapter[];
+}
+
+const DATA_PATH = path.join(process.cwd(), "data", "quran-enhanced.json");
 
 let _chapters: Map<number, RawChapter> | null = null;
 
 function chapters(): Map<number, RawChapter> {
   if (!_chapters) {
-    const raw = JSON.parse(fs.readFileSync(DATA_PATH, "utf-8")) as RawChapter[];
-    _chapters = new Map(raw.map((c) => [c.id, c]));
+    const raw = JSON.parse(fs.readFileSync(DATA_PATH, "utf-8")) as QuranData;
+    _chapters = new Map(raw.surahs.map((c) => [c.id, c]));
   }
   return _chapters;
 }
 
-export function surahName(surah: number): string {
-  const c = chapters().get(surah)!;
-  return `${c.transliteration} (${c.name})`;
+let _verseCache: Map<string, Verse> | null = null;
+
+function verseCache(): Map<string, Verse> {
+  if (!_verseCache) {
+    _verseCache = new Map();
+    for (const [surahId, chapter] of chapters()) {
+      for (const v of chapter.verses) {
+        const key = `${surahId}:${v.number}`;
+        const rawTranslit = v.translations["en.transliteration"] ?? "";
+        _verseCache.set(key, {
+          surah: surahId,
+          ayah: v.number,
+          text: v.arabic,
+          transliteration: sanitizeTranslit(rawTranslit),
+          translation: v.translations["en.sahih"] ?? undefined,
+        });
+      }
+    }
+  }
+  return _verseCache;
 }
 
 export function totalVerses(surah: number): number {
-  return chapters().get(surah)!.total_verses;
+  return chapters().get(surah)!.verseCount;
 }
 
-export function surahList(): Array<{ id: number; label: string; verses: number }> {
+export function surahList(): Array<{
+  id: number;
+  label: string;
+  verses: number;
+  name: string;
+  meaning: string;
+  revelationType: string;
+  nameArabic: string;
+}> {
   return [...chapters().values()]
     .sort((a, b) => a.id - b.id)
-    .map((c) => ({ id: c.id, label: `${c.id}. ${c.transliteration}`, verses: c.total_verses }));
+    .map((c) => ({
+      id: c.id,
+      label: `${c.id}. ${c.name}`,
+      verses: c.verseCount,
+      name: c.name,
+      meaning: c.meaning,
+      revelationType: c.revelationType,
+      nameArabic: c.nameArabic,
+    }));
 }
 
 export function verse(surah: number, ayah: number): Verse {
-  const c = chapters().get(surah)!;
-  const v = c.verses[ayah - 1];
-  return { surah, ayah, text: v.text, transliteration: v.transliteration ?? "" };
+  const key = `${surah}:${ayah}`;
+  const cached = verseCache().get(key);
+  if (!cached) {
+    const c = chapters().get(surah)!;
+    const v = c.verses[ayah - 1];
+    const rawTranslit = v.translations["en.transliteration"] ?? "";
+    return {
+      surah,
+      ayah,
+      text: v.arabic,
+      transliteration: sanitizeTranslit(rawTranslit),
+      translation: v.translations["en.sahih"] ?? undefined,
+    };
+  }
+  return cached;
 }
 
 export function range(surah: number, fromAyah: number, toAyah: number): Verse[] {

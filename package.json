@@ -3,13 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:3010": "PORT=3010 next dev",
+    "dev": "concurrently -n next,asr -c green,cyan \"next dev\" \"uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765 --reload\"",
+    "dev:3010": "concurrently -n next,asr -c green,cyan \"PORT=3010 next dev\" \"uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765 --reload\"",
+    "dev:next-only": "next dev",
+    "dev:3010:next-only": "PORT=3010 next dev",
+    "asr:start": "uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765",
     "build": "next build",
-    "start": "next start",
-    "start:3010": "PORT=3010 next start",
+    "start": "concurrently -n next,asr -c green,cyan \"next start\" \"uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765\"",
+    "start:3010": "concurrently -n next,asr -c green,cyan \"PORT=3010 next start\" \"uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765\"",
+    "start:next-only": "next start",
+    "start:3010:next-only": "PORT=3010 next start",
     "lint": "next lint",
-    "test": "tsx tests/core.test.ts",
+    "test": "tsx tests/core.test.ts && tsx tests/asr-fastapi.test.ts",
+    "test:core": "tsx tests/core.test.ts",
+    "test:asr": "tsx tests/asr-fastapi.test.ts",
     "typecheck": "tsc --noEmit",
     "service:start": "launchctl load ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist",
     "service:stop": "launchctl unload ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist",
@@ -17,7 +24,6 @@
     "logs": "tail -f /Users/foyzul/personal/hafiz-ai/hifz-tester/server.log"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.3.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -26,6 +32,8 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.2.1",
+    "playwright": "^1.60.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }

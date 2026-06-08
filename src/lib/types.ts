@@ -13,6 +13,8 @@ export interface AyahResult {
   text: string; // original, for display
   clean: boolean;
   notes: AyahNote[];
+  translation?: string;
+  transliteration?: string;
 }
 
 export interface NextWordHint {
@@ -20,6 +22,7 @@ export interface NextWordHint {
   ayah: number;
   wordIndex: number;
   text: string;
+  transliteration?: string;
 }
 
 export interface SessionReport {
@@ -37,4 +40,8 @@ export interface SurahInfo {
   id: number;
   label: string;
   verses: number;
+  name?: string;
+  meaning?: string;
+  revelationType?: "Meccan" | "Medinan";
+  nameArabic?: string;
 }

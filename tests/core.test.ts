@@ -6,10 +6,13 @@
  */
 
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { normalizeText, tokenize } from "../src/lib/normalize";
 import { OpKind, align, hasMistake } from "../src/lib/align";
 import { evaluate, luqma } from "../src/lib/session";
-import { range } from "../src/lib/quran";
+import { range, surahList, verse } from "../src/lib/quran";
+import { sanitizeTranslit } from "../src/lib/transliteration";
 
 const tests: Array<[string, () => void]> = [];
 const test = (name: string, fn: () => void) => tests.push([name, fn]);
@@ -59,6 +62,69 @@ test("ASR near-miss is tolerated", () => {
   assert.ok(!hasMistake(ops), "near-miss should be absorbed as a match");
 });
 
+// --- transliteration sanitizer ---
+test("sanitizeTranslit keeps plain text unchanged", () => {
+  assert.equal(sanitizeTranslit("Bismi Allah"), "Bismi Allah");
+});
+test("sanitizeTranslit maps <u>X</u> and <u>X</U> to <span class=\"tajweed-em\">X</span>", () => {
+  assert.equal(sanitizeTranslit("<u>a</u>"), '<span class="tajweed-em">a</span>');
+  assert.equal(sanitizeTranslit("<u>a</U>"), '<span class="tajweed-em">a</span>');
+});
+test("sanitizeTranslit maps <b>X</b> and <b>X</B> to <span class=\"tajweed-heavy\">X</span>", () => {
+  assert.equal(sanitizeTranslit("<b>a</b>"), '<span class="tajweed-heavy">a</span>');
+  assert.equal(sanitizeTranslit("<b>a</B>"), '<span class="tajweed-heavy">a</span>');
+});
+test("sanitizeTranslit handles <i> and <strong>", () => {
+  assert.equal(sanitizeTranslit("<i>a</i>"), '<span class="tajweed-i">a</span>');
+  assert.equal(sanitizeTranslit("<strong>a</strong>"), '<span class="tajweed-strong">a</span>');
+});
+test("sanitizeTranslit strips orphan </b>, </B>, </U> closes", () => {
+  assert.equal(sanitizeTranslit("a</b>b</B>c</U>"), "abc");
+});
+test("sanitizeTranslit strips unknown tags (e.g. <script>, <img onerror=…>)", () => {
+  assert.equal(sanitizeTranslit("a<script>b</script>c"), "abc");
+  assert.equal(sanitizeTranslit('a<img onerror="x">b'), "ab");
+});
+test("sanitizeTranslit strips tags with attributes", () => {
+  assert.equal(sanitizeTranslit('a<u class="x">b</u>c'), "abc");
+});
+test("sanitizeTranslit drops an unclosed <u> (no close in the input)", () => {
+  assert.equal(sanitizeTranslit("a<u>b"), "ab");
+});
+
+// --- quran-enhanced loader ---
+test("surahList exposes meaning and revelationType for every surah", () => {
+  const list = surahList();
+  assert.equal(list.length, 114);
+  for (const s of list) {
+    assert.ok(s.meaning && s.meaning.length > 0, `surah ${s.id} missing meaning`);
+    assert.ok(
+      s.revelationType === "Meccan" || s.revelationType === "Medinan",
+      `surah ${s.id} has invalid revelationType`,
+    );
+  }
+});
+test("surahList preserves the existing {id, label, verses} shape for the dropdown", () => {
+  const list = surahList();
+  for (const s of list) {
+    assert.equal(typeof s.id, "number");
+    assert.equal(typeof s.label, "string");
+    assert.equal(typeof s.verses, "number");
+    assert.ok(s.label.includes(String(s.id)));
+  }
+});
+test("verse() returns translation and transliteration for a known ayah", () => {
+  const v = verse(1, 1);
+  assert.equal(v.surah, 1);
+  assert.equal(v.ayah, 1);
+  assert.ok(v.text.length > 0);
+  assert.ok(v.translation && v.translation.length > 0, "missing translation");
+  assert.ok(v.transliteration && v.transliteration.length > 0, "missing transliteration");
+  // Transliteration should be sanitized (no raw <u>/<b> left)
+  assert.ok(!v.transliteration.includes("<u>"), "transliteration contains raw <u>");
+  assert.ok(!v.transliteration.includes("<b>"), "transliteration contains raw <b>");
+});
+
 // --- end-to-end over real bundled data (Al-Fatihah) ---
 test("session clean on perfect recitation", () => {
   const verses = range(1, 1, 7);
@@ -85,6 +151,20 @@ test("session pinpoints mistake in the correct ayah", () => {
 test("luqma returns the next word", () => {
   const w = luqma(1, 2, 0, 1);
   assert.ok(w.length > 0 && !w.includes(" "));
+});
+
+// --- ASR worker regression: the 4-layer turbo decoder (the model used in
+// scripts/asr_fastapi.py, and the stdio worker when HIFZ_ASR_MODEL is set to
+// a turbo variant) loses context and enters infinite repetition loops when
+// the stride is too long. The MaddoggProduction model card recommends 2-3s.
+// Pin both worker files at 2 so a stray bump back to 5 fails CI.
+test("scripts/asr.py uses stride_length_s=2 to prevent turbo repetition loops", () => {
+  const src = fs.readFileSync(path.join(process.cwd(), "scripts", "asr.py"), "utf-8");
+  assert.match(src, /stride_length_s\s*=\s*2/);
+});
+test("scripts/asr_fastapi.py uses stride_length_s=2 to prevent turbo repetition loops", () => {
+  const src = fs.readFileSync(path.join(process.cwd(), "scripts", "asr_fastapi.py"), "utf-8");
+  assert.match(src, /stride_length_s\s*=\s*2/);
 });
 
 // --- runner ---
