@@ -140,7 +140,11 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const MAX_RECORD_SECONDS = 30;
+  // 60s covers the long single verses that can't be recited under 30s. The
+  // ASR pipeline already handles long-form audio via Whisper's sliding window
+  // (chunk_length_s/stride in the worker), so this is purely a UX cap. Reciting
+  // many verses at once is handled by selecting a range, not a longer recording.
+  const MAX_RECORD_SECONDS = 60;
 
   useEffect(() => {
     return () => {
