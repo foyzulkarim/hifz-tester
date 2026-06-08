@@ -52,6 +52,44 @@ html, body {
   margin: 28px 0;
 }
 
+.masthead-actions { display: flex; gap: 10px; margin-top: 18px; }
+.btn-sm { padding: 7px 14px; font-size: 0.85rem; }
+a.btn-sm { text-decoration: none; display: inline-block; }
+
+/* Share popup */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(33, 30, 24, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: fade 0.15s ease;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  width: 100%; max-width: 380px;
+  animation: rise 0.2s ease both;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal-head h2 {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 500; font-size: 1.3rem;
+}
+.modal-close {
+  background: transparent; border: 0; padding: 2px 8px;
+  font-size: 1.5rem; line-height: 1; color: var(--ink-soft);
+}
+.modal-close:hover { color: var(--ink); }
+.share-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.share-item { text-align: center; }
+.share-item:hover:not(:disabled) { background: var(--green-soft); border-color: #c6dfd0; }
+.btn-block { width: 100%; }
+
 .panel {
   background: var(--paper-raised);
   border: 1px solid var(--line);

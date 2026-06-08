@@ -26,7 +26,7 @@
 
   <!-- mic record -->
   <rect class="box" x="55" y="70" width="200" height="54" fill="#eff6ff" stroke="#93c5fd"/>
-  <text class="boxTitle" x="155" y="93" text-anchor="middle" fill="#1e3a8a">🎙 mic record</text>
+  <text class="boxTitle" x="155" y="93" text-anchor="middle" fill="#1e3a8a">mic record</text>
   <text class="boxSub" x="155" y="111" text-anchor="middle" fill="#475569">capture recitation</text>
 
   <!-- decode + resample -->
@@ -35,11 +35,10 @@
   <text class="boxSub" x="155" y="202" text-anchor="middle" fill="#475569">→ 16 kHz mono PCM</text>
   <text class="boxSub" x="155" y="218" text-anchor="middle" fill="#94a3b8">OfflineAudioContext</text>
 
-  <!-- reference text (bottom of browser lane) -->
-  <rect class="box" x="55" y="630" width="200" height="68" fill="#f5f3ff" stroke="#c4b5fd"/>
-  <text class="boxTitle" x="155" y="654" text-anchor="middle" fill="#5b21b6">reference ayah text</text>
-  <text class="boxSub" x="155" y="672" text-anchor="middle" fill="#475569">data/quran-enhanced.json</text>
-  <text class="boxSub" x="155" y="688" text-anchor="middle" fill="#94a3b8">114 surahs, offline</text>
+  <!-- feedback UI (where the report is rendered, back in the browser) -->
+  <rect class="box" x="55" y="647" width="200" height="54" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="boxTitle" x="155" y="670" text-anchor="middle" fill="#1e3a8a">feedback UI</text>
+  <text class="boxSub" x="155" y="688" text-anchor="middle" fill="#475569">verdict · luqma · tuning</text>
 
   <!-- browser internal edges -->
   <line class="edge" x1="155" y1="124" x2="155" y2="158" marker-end="url(#arrow)"/>
@@ -47,6 +46,15 @@
   <!-- ===================== SERVER LANE ===================== -->
   <rect class="lane" x="320" y="20" width="560" height="720"/>
   <text class="laneLbl" x="340" y="48">Server — Next.js (Node runtime)</text>
+
+  <!-- legend (top-right) -->
+  <text x="635" y="92" class="boxSub" fill="#64748b" font-weight="700">Legend</text>
+  <rect x="635" y="100" width="14" height="14" rx="3" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="657" y="111" class="boxSub" fill="#475569">live ASR path</text>
+  <rect x="635" y="122" width="14" height="14" rx="3" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="5 3"/>
+  <text x="657" y="133" class="boxSub" fill="#475569">wired, not live</text>
+  <rect x="635" y="144" width="14" height="14" rx="3" fill="#ecfeff" stroke="#67e8f9"/>
+  <text x="657" y="155" class="boxSub" fill="#475569">deterministic engine (no LLM)</text>
 
   <!-- POST arrow from browser to server -->
   <path class="edgeBlue" d="M 255 194 H 360" marker-end="url(#arrowBlue)"/>
@@ -88,9 +96,16 @@
   <text class="boxSub" x="475" y="521" text-anchor="middle" fill="#475569">applied to both sides</text>
 
   <path class="edge" d="M 475 454 V 478" marker-end="url(#arrow)"/>
-  <!-- reference text feeds normalize -->
-  <path class="edge" d="M 255 664 H 310 V 507 H 358" marker-end="url(#arrow)"/>
-  <text class="edgeLbl" x="300" y="500" text-anchor="middle">reference</text>
+
+  <!-- reference ayah text (server-side data source) -->
+  <rect class="box" x="635" y="478" width="235" height="60" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text class="boxTitle" x="752" y="500" text-anchor="middle" fill="#5b21b6">reference ayah text</text>
+  <text class="boxSub" x="752" y="517" text-anchor="middle" fill="#475569">data/quran-enhanced.json</text>
+  <text class="boxSub" x="752" y="533" text-anchor="middle" fill="#94a3b8">114 surahs · read on server</text>
+
+  <!-- reference feeds normalize -->
+  <path class="edge" d="M 635 508 H 592" marker-end="url(#arrow)"/>
+  <text class="edgeLbl" x="613" y="500" text-anchor="middle">reference</text>
 
   <!-- align -->
   <rect class="box" x="360" y="560" width="230" height="54" fill="#ecfeff" stroke="#67e8f9"/>
@@ -107,19 +122,14 @@
 
   <path class="edge" d="M 475 614 V 638" marker-end="url(#arrow)"/>
 
-  <!-- SessionReport -> UI -->
-  <rect class="box" x="640" y="647" width="200" height="54" fill="#eff6ff" stroke="#93c5fd"/>
-  <text class="boxTitle" x="740" y="670" text-anchor="middle" fill="#1e3a8a">SessionReport JSON</text>
-  <text class="boxSub" x="740" y="688" text-anchor="middle" fill="#475569">▸ rendered in UI</text>
+  <!-- SessionReport JSON (HTTP response) -->
+  <rect class="box" x="640" y="640" width="200" height="68" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="boxTitle" x="740" y="667" text-anchor="middle" fill="#1e3a8a">SessionReport JSON</text>
+  <text class="boxSub" x="740" y="685" text-anchor="middle" fill="#475569">HTTP response</text>
 
   <path class="edgeBlue" d="M 590 674 H 638" marker-end="url(#arrowBlue)"/>
 
-  <!-- legend -->
-  <text x="640" y="430" class="boxSub" fill="#64748b" font-weight="700">Legend</text>
-  <rect x="640" y="440" width="14" height="14" rx="3" fill="#fff7ed" stroke="#fdba74"/>
-  <text x="662" y="451" class="boxSub" fill="#475569">live ASR path</text>
-  <rect x="640" y="462" width="14" height="14" rx="3" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="5 3"/>
-  <text x="662" y="473" class="boxSub" fill="#475569">wired, not live</text>
-  <rect x="640" y="484" width="14" height="14" rx="3" fill="#ecfeff" stroke="#67e8f9"/>
-  <text x="662" y="495" class="boxSub" fill="#475569">deterministic engine (no LLM)</text>
+  <!-- response returns to the browser and is rendered -->
+  <path class="edgeBlue" d="M 740 708 V 728 H 155 V 703" marker-end="url(#arrowBlue)"/>
+  <text class="edgeLblBlue" x="430" y="722" text-anchor="middle">JSON response → rendered in browser</text>
 </svg>

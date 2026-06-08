@@ -18,6 +18,24 @@ function routeFor(backend: Backend): string {
   return backend === "fastapi" ? "/api/check-fast" : "/api/check";
 }
 
+// What gets shared and where it points. Update SHARE_URL to your deployed app
+// (or keep the repo link), and tweak SHARE_TEXT to taste.
+const SHARE_URL = "https://github.com/foyzulkarim/hifz-tester";
+const SHARE_TEXT =
+  "Hifz Tester — recite a Quran range aloud and get word-level feedback on exactly where you slipped.";
+
+// TODO: paste your Google Form link here to enable the Feedback button.
+// While empty, the button renders disabled.
+const FEEDBACK_URL = "";
+
+/** Social targets for the Share popup. Each opens in a small window. */
+const SHARE_TARGETS: Array<{ name: string; href: string }> = [
+  { name: "LinkedIn", href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(SHARE_URL)}` },
+  { name: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SHARE_URL)}` },
+  { name: "X / Twitter", href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(SHARE_TEXT)}` },
+  { name: "WhatsApp", href: `https://wa.me/?text=${encodeURIComponent(`${SHARE_TEXT} ${SHARE_URL}`)}` },
+];
+
 /** Decode a recorded blob to mono PCM at 16 kHz (what the ASR expects). */
 async function toMono16k(blob: Blob): Promise<Float32Array> {
   const arr = await blob.arrayBuffer();
@@ -103,6 +121,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordTime, setRecordTime] = useState(0);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   // const [backend, setBackend] = useState<Backend>(loadInitialBackend);
   const backend: Backend = 'fastapi';
 
@@ -269,11 +289,49 @@ export default function Home() {
     }
   }
 
+  // Close the share popup on Escape.
+  useEffect(() => {
+    if (!shareOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShareOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [shareOpen]);
+
+  function openShare(href: string) {
+    window.open(href, "_blank", "noopener,noreferrer,width=600,height=540");
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(SHARE_URL);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard may be unavailable (e.g. non-secure context); ignore.
+    }
+  }
+
   return (
     <main className="wrap">
       <header className="masthead">
         <h1>Hifz Tester</h1>
         <p>Recite a range aloud. It listens, then tells you exactly where you slipped.</p>
+        <div className="masthead-actions">
+          <button className="btn-ghost btn-sm" onClick={() => setShareOpen(true)}>
+            Share
+          </button>
+          {FEEDBACK_URL ? (
+            <a className="btn-ghost btn-sm" href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
+              Feedback
+            </a>
+          ) : (
+            <button className="btn-ghost btn-sm" disabled title="Feedback form link coming soon">
+              Feedback
+            </button>
+          )}
+        </div>
       </header>
 
       <section className="panel stack">
@@ -478,6 +536,35 @@ export default function Home() {
           </p>
         </div>
       </details>
+
+      {shareOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShareOpen(false)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Share Hifz Tester"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2>Share</h2>
+              <button className="modal-close" onClick={() => setShareOpen(false)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="share-grid">
+              {SHARE_TARGETS.map((t) => (
+                <button key={t.name} className="btn-ghost share-item" onClick={() => openShare(t.href)}>
+                  {t.name}
+                </button>
+              ))}
+            </div>
+            <button className="btn-ghost btn-block" onClick={copyLink}>
+              {copied ? "Link copied ✓" : "Copy link"}
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
