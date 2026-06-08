@@ -21,7 +21,7 @@
     "service:start": "launchctl load ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist",
     "service:stop": "launchctl unload ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist",
     "service:restart": "npm run service:stop && npm run build && npm run service:start",
-    "logs": "tail -f /Users/foyzul/personal/hafiz-ai/hifz-tester/server.log"
+    "logs": "tail -f server.log"
   },
   "dependencies": {
     "next": "^15.1.0",

@@ -53,6 +53,17 @@ fumbling a *correct* word rather than flagging you.
 
 ---
 
+## Documentation
+
+- **[docs/architecture.md](docs/architecture.md)** — system shape, module map,
+  data flow, and the two load-bearing decisions (verdict-in-code, warm model).
+- **[docs/node-python-ipc.md](docs/node-python-ipc.md)** — deep dive on calling
+  Python from Node: the two interop patterns (stdio NDJSON and FastAPI
+  loopback), their wire protocols, robustness handling, and an honest
+  scalability analysis. This is the most interesting engineering in the repo.
+
+---
+
 ## Requirements
 
 - Node.js 18.18+ (20+ recommended)
@@ -96,9 +107,16 @@ launchctl unload ~/Library/LaunchAgents/com.foyzul.hifz-tester.plist
 # Check if running
 launchctl list | grep com.foyzul.hifz-tester
 
-# View logs
-tail -f ~/personal/hafiz-ai/hifz-tester/server.log
+# View logs (server.log is written in the repo root)
+npm run logs
 ```
+
+> The LaunchAgent plist (`com.<you>.hifz-tester.plist`) is not committed — it
+> contains machine-specific absolute paths. Create your own in
+> `~/Library/LaunchAgents/` pointing `ProgramArguments` at `npm start` in this
+> directory, with `WorkingDirectory` set to the repo and `StandardOutPath` /
+> `StandardErrorPath` set to `server.log`. The `service:*` scripts in
+> `package.json` assume that filename.
 
 ---
 
@@ -239,3 +257,24 @@ hifz-tester/
   phrasing only — keep the verdict in code.
 - **In-browser ASR:** transformers.js can also run client-side via WebGPU for a
   zero-backend, fully-offline variant (practical for smaller models).
+
+---
+
+## Contributing
+
+Contributions are welcome. A few orientations before you dive in:
+
+- The **deterministic core** (`normalize.ts`, `align.ts`, `session.ts`) is the
+  trustworthy heart of the app and is fully tested without a model or audio. If
+  you touch it, keep `npm test` green and add a case to `tests/core.test.ts`.
+- The verdict stays **in code, never in an LLM** — see
+  [docs/architecture.md](docs/architecture.md). PRs that move correctness
+  judgement into a model will be redirected.
+- The two ASR workers share invariants (audio format, `stride_length_s=2`,
+  `write_wav`). If you change one worker, mirror it in the other — see the
+  "Shared invariants" section in [docs/node-python-ipc.md](docs/node-python-ipc.md).
+- Run `npm run typecheck` and `npm run lint` before opening a PR.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
