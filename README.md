@@ -68,9 +68,9 @@ fumbling a *correct* word rather than flagging you.
   scalability analysis. This is the most interesting engineering in the repo.
 - **[docs/adr/](docs/adr/)** — Architecture Decision Records: *why* the design is
   the way it is. Start with
-  [ADR 0001 — how Node calls the Python ASR model](docs/adr/0001-node-python-asr-bridge.md),
-  which traces the evolution from per-request spawn → long-lived stdio child →
-  FastAPI over TCP loopback, and why each step was taken.
+  [ADR 0001 — how Node calls the Python ASR model](docs/adr/0001-node-python-asr-bridge.md):
+  the forces behind the warm out-of-process model, why FastAPI over loopback is
+  the default, what it buys you, and the alternatives rejected.
 
 ---
 
