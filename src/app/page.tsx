@@ -3,21 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionReport, SurahInfo, AyahNote } from "@/lib/types";
 
-/** Which ASR backend the next /api/check call should target. */
-type Backend = "stdio" | "fastapi";
-
-const BACKEND_STORAGE_KEY = "hifz.backend";
-
-function loadInitialBackend(): Backend {
-  if (typeof window === "undefined") return "stdio";
-  const stored = window.localStorage.getItem(BACKEND_STORAGE_KEY);
-  return stored === "fastapi" ? "fastapi" : "stdio";
-}
-
-function routeFor(backend: Backend): string {
-  return backend === "fastapi" ? "/api/check-fast" : "/api/check";
-}
-
 // What gets shared and where it points. Update SHARE_URL to your deployed app
 // (or keep the repo link), and tweak SHARE_TEXT to taste.
 const SHARE_URL = "https://github.com/foyzulkarim/hifz-tester";
@@ -35,6 +20,13 @@ const SHARE_TARGETS: Array<{ name: string; href: string }> = [
   { name: "X / Twitter", href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(SHARE_TEXT)}` },
   { name: "WhatsApp", href: `https://wa.me/?text=${encodeURIComponent(`${SHARE_TEXT} ${SHARE_URL}`)}` },
 ];
+
+/** The reference verses /api/ayahs returns for the selected range. */
+interface ReferenceVerse {
+  ayah: number;
+  text: string;
+  translation?: string;
+}
 
 /** Decode a recorded blob to mono PCM at 16 kHz (what the ASR expects). */
 async function toMono16k(blob: Blob): Promise<Float32Array> {
@@ -112,33 +104,36 @@ export default function Home() {
   const [threshold, setThreshold] = useState(0.5);
 
   const [recording, setRecording] = useState(false);
-  const [samples, setSamples] = useState<Float32Array | null>(null);
   const [busy, setBusy] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [referenceVerses, setReferenceVerses] = useState<ReferenceVerse[]>([]);
+  // Hidden by default so the reciter can't peek at the text right before
+  // (or between) memorization attempts; revealing is a deliberate choice.
+  const [showReference, setShowReference] = useState(false);
   const [report, setReport] = useState<SessionReport | null>(null);
-  const [pendingReport, setPendingReport] = useState<SessionReport | null>(null);
-  const [previewTranscript, setPreviewTranscript] = useState("");
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordTime, setRecordTime] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  // const [backend, setBackend] = useState<Backend>(loadInitialBackend);
-  const backend: Backend = 'fastapi';
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(BACKEND_STORAGE_KEY, backend);
-    }
-  }, [backend]);
-
-  const activeReport = report ?? pendingReport;
-  const nextWord = activeReport?.nextWord;
+  const nextWord = report?.nextWord;
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Each new recording bumps the generation so a stale in-flight
+  // transcription can't overwrite the transcript of a newer take.
+  const transcribeGenRef = useRef(0);
+  // In-flight transcription; `check()` awaits this if the user clicks
+  // "Check recitation" before ASR finishes.
+  const transcribePromiseRef = useRef<Promise<string | null> | null>(null);
+  // Whether the user has run a check yet; range/threshold changes only
+  // auto-re-verify after the first explicit check.
+  const checkedRef = useRef(false);
+  const rangeInitRef = useRef(true);
 
   const MAX_RECORD_SECONDS = 60;
 
@@ -156,8 +151,10 @@ export default function Home() {
     // production build drops the branch entirely.
     if (process.env.NODE_ENV === "production") return;
     if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__testReport) {
-      setSamples(new Float32Array(1));
-      setReport((window as unknown as Record<string, unknown>).__testReport as SessionReport);
+      const injected = (window as unknown as Record<string, unknown>).__testReport as SessionReport;
+      setTranscript(injected.transcript || "test");
+      setReport(injected);
+      checkedRef.current = true;
     }
   }, []);
 
@@ -178,44 +175,92 @@ export default function Home() {
       .catch(() => setError("Could not load the surah list."));
   }, []);
 
+  // Load the actual Quran text for the selected range -- the reference of
+  // what SHOULD be recited, distinct from the ASR transcript of what WAS.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/ayahs?surah=${surah}&from=${from}&to=${to}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) setReferenceVerses(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [surah, from, to]);
+
+  // After the first check, changing the range or tolerance re-verifies the
+  // cached transcript instantly -- verification is text-only, no ASR re-run.
+  useEffect(() => {
+    if (rangeInitRef.current) {
+      rangeInitRef.current = false;
+      return;
+    }
+    setReport(null);
+    if (!checkedRef.current || !transcript) return;
+    let cancelled = false;
+    verifyTranscript(transcript).then((r) => {
+      if (!cancelled && r) setReport(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surah, from, to, threshold]);
+
   function onSurahChange(id: number) {
     const vc = surahs.find((s) => s.id === id)?.verses ?? 7;
     setSurah(id);
     setFrom(1);
     setTo(Math.min(vc, 7));
-    setReport(null);
   }
 
   async function startRecording() {
     setError("");
     setReport(null);
-    setPendingReport(null);
-    setPreviewTranscript("");
+    setTranscript("");
     setAudioUrl(null);
+    setShowReference(false); // re-hide the text for the new attempt
+    // A fresh take must be checked explicitly; auto-re-verify on range
+    // change only kicks in after THIS transcript has been checked once.
+    checkedRef.current = false;
+    transcribePromiseRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
       chunksRef.current = [];
       rec.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
-      rec.onstop = async () => {
+      rec.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: rec.mimeType });
         setAudioUrl(URL.createObjectURL(blob));
-        try {
-          const decodedSamples = await toMono16k(blob);
-          setSamples(decodedSamples);
-          // Auto-transcribe so the user sees the Arabic text immediately
-          setTranscribing(true);
-          const autoReport = await runCheck(decodedSamples);
-          if (autoReport) {
-            setPreviewTranscript(autoReport.transcript);
-            setPendingReport(autoReport);
+        // Auto-transcribe in the background while the user picks the range;
+        // by the time they click "Check recitation" the transcript is ready.
+        const gen = ++transcribeGenRef.current;
+        setTranscribing(true);
+        transcribePromiseRef.current = (async (): Promise<string | null> => {
+          try {
+            const samples = await toMono16k(blob);
+            const text = await transcribeSamples(samples, gen);
+            if (transcribeGenRef.current !== gen) return null; // superseded
+            if (text !== null) {
+              if (text.trim()) {
+                setTranscript(text);
+              } else {
+                setError("Nothing was transcribed — the recording may be silent. Try again.");
+              }
+            }
+            return text;
+          } catch {
+            if (transcribeGenRef.current === gen) {
+              setError("Could not process the recording. Try again.");
+            }
+            return null;
+          } finally {
+            if (transcribeGenRef.current === gen) setTranscribing(false);
           }
-          setTranscribing(false);
-        } catch {
-          setError("Could not process the recording. Try again.");
-          setTranscribing(false);
-        }
+        })();
       };
       rec.start();
       recorderRef.current = rec;
@@ -244,17 +289,25 @@ export default function Home() {
     setRecording(false);
   }
 
-  async function runCheck(audioSamples: Float32Array): Promise<SessionReport | null> {
-    const qs = new URLSearchParams({
-      surah: String(surah),
-      from: String(from),
-      to: String(to),
-      threshold: String(threshold),
-    });
-    const res = await fetch(`${routeFor(backend)}?${qs}`, {
+  async function transcribeSamples(audioSamples: Float32Array, gen: number): Promise<string | null> {
+    const res = await fetch("/api/transcribe", {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body: new Blob([new Uint8Array(audioSamples.buffer as ArrayBuffer)]),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (transcribeGenRef.current === gen) setError(data.error ?? "Transcription failed.");
+      return null;
+    }
+    return data.transcript as string;
+  }
+
+  async function verifyTranscript(transcriptText: string): Promise<SessionReport | null> {
+    const res = await fetch("/api/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ surah, from, to, threshold, transcript: transcriptText }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -265,23 +318,21 @@ export default function Home() {
   }
 
   async function check() {
-    if (!samples) return;
-    // If the pending report matches the current range, show it instantly
-    if (
-      pendingReport &&
-      pendingReport.surah === surah &&
-      pendingReport.fromAyah === from &&
-      pendingReport.toAyah === to
-    ) {
-      setReport(pendingReport);
-      return;
-    }
-    setBusy(true);
     setError("");
-    setReport(null);
+    setBusy(true);
     try {
-      const freshReport = await runCheck(samples);
-      if (freshReport) setReport(freshReport);
+      // If ASR is still chewing on the recording, wait for it instead of
+      // re-running anything.
+      let text = transcript;
+      if (!text && transcribePromiseRef.current) {
+        text = (await transcribePromiseRef.current) ?? "";
+      }
+      if (!text.trim()) return;
+      const freshReport = await verifyTranscript(text);
+      if (freshReport) {
+        setReport(freshReport);
+        checkedRef.current = true;
+      }
     } catch {
       setError("Request failed. Is the dev server running?");
     } finally {
@@ -334,6 +385,42 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Step 1: record from memory -- nothing to peek at yet. */}
+      <section className="panel stack">
+        <div className="actions">
+          {!recording ? (
+            <button className="btn-rec" onClick={startRecording} disabled={busy}>
+              ● Record recitation
+            </button>
+          ) : (
+            <button className="btn-rec recording" onClick={stopRecording}>
+              ■ Stop {recordTime > 0 && `(${recordTime}s / ${MAX_RECORD_SECONDS}s)`}
+            </button>
+          )}
+          {recording && (
+            <span className="hint">{MAX_RECORD_SECONDS - recordTime}s remaining</span>
+          )}
+          {transcribing && <span className="hint">Transcribing…</span>}
+        </div>
+
+        {audioUrl && !recording && (
+          <div className="playback">
+            <label>Playback your recording</label>
+            <audio ref={audioRef} controls src={audioUrl} preload="metadata" />
+          </div>
+        )}
+
+        {transcript && (
+          <div className="transcript">
+            Heard (ASR — plain text, no diacritics):{" "}
+            <span className="ar">{transcript}</span>
+          </div>
+        )}
+
+        {error && <div className="error">{error}</div>}
+      </section>
+
+      {/* Step 2: pick the range, see the actual Quran text, then check. */}
       <section className="panel stack">
         <div className="row range">
           <div>
@@ -378,64 +465,52 @@ export default function Home() {
           </div>
         </div>
 
+        {/* The reference text (what SHOULD be recited). Collapsed by default
+            so reciting stays a memory test; gone once a report renders --
+            the report repeats these verses with mistakes marked. */}
+        {referenceVerses.length > 0 && !report && (
+          <div className="stack">
+            <div className="actions">
+              <label style={{ margin: 0 }}>
+                Actual Quran text — ayah {from}{to !== from ? `–${to}` : ""} (what should be recited)
+              </label>
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => setShowReference((s) => !s)}
+              >
+                {showReference ? "Hide text" : "Show text"}
+              </button>
+            </div>
+            {showReference ? (
+              referenceVerses.map((v) => (
+                <article key={v.ayah} className="ayah">
+                  <div className="ayah-head">Ayah {v.ayah}</div>
+                  <div className="arabic">{v.text}</div>
+                  {v.translation && (
+                    <div className="ayah-translation">{v.translation}</div>
+                  )}
+                </article>
+              ))
+            ) : (
+              <span className="hint">
+                Hidden so you recite from memory. Reveal only to double-check the range.
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="actions">
-          {!recording ? (
-            <button className="btn-rec" onClick={startRecording} disabled={busy || transcribing}>
-              ● Record recitation
-            </button>
-          ) : (
-            <button className="btn-rec recording" onClick={stopRecording}>
-              ■ Stop {recordTime > 0 && `(${recordTime}s / ${MAX_RECORD_SECONDS}s)`}
-            </button>
-          )}
-          <button className="btn-primary" onClick={check} disabled={!samples || busy || transcribing || recording}>
-            {busy ? "Listening…" : "Check recitation"}
+          <button
+            className="btn-primary"
+            onClick={check}
+            disabled={(!transcript && !transcribing) || recording || busy}
+          >
+            {busy ? "Checking…" : "Check recitation"}
           </button>
-          {/* <div className="backend-toggle" role="group" aria-label="ASR backend">
-            <span className="backend-toggle-label">Model:</span>
-            <button
-              type="button"
-              className={backend === "stdio" ? "btn-primary backend-btn" : "btn-ghost backend-btn"}
-              onClick={() => setBackend("stdio")}
-              disabled={busy || transcribing || recording}
-              title="tarteel-ai/whisper-base-ar-quran — smaller, faster inference, lower accuracy on melodic recitation"
-            >
-              fast
-            </button>
-            <button
-              type="button"
-              className={backend === "fastapi" ? "btn-primary backend-btn" : "btn-ghost backend-btn"}
-              onClick={() => setBackend("fastapi")}
-              disabled={busy || transcribing || recording}
-              title="MaddoggProduction/whisper-l-v3-turbo-quran-lora — larger, slower inference, outputs native tashkeel, higher accuracy"
-            >
-              slow
-            </button>
-          </div> */}
-          {recording && (
-            <span className="hint">{MAX_RECORD_SECONDS - recordTime}s remaining</span>
+          {!transcript && !transcribing && !recording && (
+            <span className="hint">Record your recitation first.</span>
           )}
-          {samples && !recording && !busy && !transcribing && !previewTranscript && (
-            <span className="hint">Recording ready.</span>
-          )}
-          {transcribing && <span className="hint">Transcribing…</span>}
         </div>
-
-        {audioUrl && !recording && (
-          <div className="playback">
-            <label>Playback your recording</label>
-            <audio ref={audioRef} controls src={audioUrl} preload="metadata" />
-          </div>
-        )}
-
-        {previewTranscript && !report && (
-          <div className="transcript">
-            Heard (ASR — plain text, no diacritics):{" "}
-            <span className="ar">{previewTranscript}</span>
-          </div>
-        )}
-
-        {error && <div className="error">{error}</div>}
       </section>
 
       {report && (
@@ -444,13 +519,6 @@ export default function Home() {
             {report.allClean ? "✓ " : "⚠ "}{report.summary}
           </div>
 
-          {report.transcript && (
-            <div className="transcript">
-              Heard (ASR — plain text, no diacritics):{" "}
-              <span className="ar">{report.transcript}</span>
-            </div>
-          )}
-
           {currentSurah && (
             <div className="report-head">
               <span className="surah-ar">{currentSurah.nameArabic}</span>
@@ -458,9 +526,6 @@ export default function Home() {
               <span className={`revelation-badge ${currentSurah.revelationType?.toLowerCase()}`}>
                 {currentSurah.revelationType}
               </span>
-              {/* <span className="backend-tag" title={`Last check used ${routeFor(backend)}`}>
-                via {backend === "fastapi" ? "slow" : "fast"}
-              </span> */}
             </div>
           )}
 
@@ -514,10 +579,10 @@ export default function Home() {
                 Ayah {nextWord.ayah}, word {nextWord.wordIndex + 1}
               </span>
             </div>
-          ) : activeReport ? (
+          ) : report ? (
             <p className="hint">You reached the end of the selected range.</p>
           ) : (
-            <p className="hint">Recite first — the next word appears here automatically.</p>
+            <p className="hint">Recite and check first — the next word appears here automatically.</p>
           )}
         </div>
       </details>
