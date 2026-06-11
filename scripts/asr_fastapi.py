@@ -30,7 +30,8 @@ from transformers import pipeline
 
 MODEL_ID = os.environ.get(
     "HIFZ_ASR_MODEL",
-    "MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix",
+    "IJyad/whisper-large-v3-Tarteel",
+    # "MaddoggProduction/whisper-l-v3-turbo-quran-lora-dataset-mix",
 )
 SAMPLE_RATE = 16000
 

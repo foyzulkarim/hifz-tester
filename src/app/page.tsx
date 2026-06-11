@@ -140,7 +140,7 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const MAX_RECORD_SECONDS = 30;
+  const MAX_RECORD_SECONDS = 60;
 
   useEffect(() => {
     return () => {
