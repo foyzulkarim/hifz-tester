@@ -130,9 +130,6 @@ export default function Home() {
   // In-flight transcription; `check()` awaits this if the user clicks
   // "Check recitation" before ASR finishes.
   const transcribePromiseRef = useRef<Promise<string | null> | null>(null);
-  // Whether the user has run a check yet; range/threshold changes only
-  // auto-re-verify after the first explicit check.
-  const checkedRef = useRef(false);
   const rangeInitRef = useRef(true);
 
   const MAX_RECORD_SECONDS = 60;
@@ -154,7 +151,6 @@ export default function Home() {
       const injected = (window as unknown as Record<string, unknown>).__testReport as SessionReport;
       setTranscript(injected.transcript || "test");
       setReport(injected);
-      checkedRef.current = true;
     }
   }, []);
 
@@ -190,23 +186,16 @@ export default function Home() {
     };
   }, [surah, from, to]);
 
-  // After the first check, changing the range or tolerance re-verifies the
-  // cached transcript instantly -- verification is text-only, no ASR re-run.
+  // Changing the range or tolerance invalidates the current verdict: clear
+  // it so the user can re-check the same recording against the new selection
+  // (verification reuses the cached transcript -- no ASR re-run).
   useEffect(() => {
     if (rangeInitRef.current) {
       rangeInitRef.current = false;
       return;
     }
     setReport(null);
-    if (!checkedRef.current || !transcript) return;
-    let cancelled = false;
-    verifyTranscript(transcript).then((r) => {
-      if (!cancelled && r) setReport(r);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setError("");
   }, [surah, from, to, threshold]);
 
   function onSurahChange(id: number) {
@@ -222,9 +211,6 @@ export default function Home() {
     setTranscript("");
     setAudioUrl(null);
     setShowReference(false); // re-hide the text for the new attempt
-    // A fresh take must be checked explicitly; auto-re-verify on range
-    // change only kicks in after THIS transcript has been checked once.
-    checkedRef.current = false;
     transcribePromiseRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -329,10 +315,7 @@ export default function Home() {
       }
       if (!text.trim()) return;
       const freshReport = await verifyTranscript(text);
-      if (freshReport) {
-        setReport(freshReport);
-        checkedRef.current = true;
-      }
+      if (freshReport) setReport(freshReport);
     } catch {
       setError("Request failed. Is the dev server running?");
     } finally {
