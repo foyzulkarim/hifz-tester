@@ -83,11 +83,45 @@ The Python worker auto-selects the best available device: CUDA (NVIDIA) → MPS
 
 ### Remote or LAN ASR worker
 
-If you're running the ASR worker on a different machine:
+If you're running the ASR worker on a different machine, point the Next.js app at it:
 
 ```bash
 HIFZ_ASR_FASTAPI_URL=http://<ip>:8765/transcribe npm run dev
 ```
+
+For a persistent setup where the worker should survive SSH disconnects and restart automatically on reboot, run it as a systemd service on the Linux machine:
+
+```bash
+sudo nano /etc/systemd/system/hifz-asr.service
+```
+
+```ini
+[Unit]
+Description=Hifz Tester ASR Worker
+After=network.target
+
+[Service]
+User=<your-user>
+WorkingDirectory=/path/to/hifz-tester
+ExecStart=/path/to/hifz-tester/.venv/bin/uvicorn scripts.asr_fastapi:app --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=5
+Environment=HIFZ_ASR_MODEL=IJyad/whisper-large-v3-Tarteel
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable hifz-asr
+sudo systemctl start hifz-asr
+sudo systemctl status hifz-asr
+```
+
+Check logs anytime with `journalctl -u hifz-asr -f`. Verify the worker is ready: `curl http://<ip>:8765/health`.
 
 ## User flow
 
