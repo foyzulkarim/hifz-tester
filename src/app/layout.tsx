@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Amiri, Fraunces, Spectral } from "next/font/google";
 import "./globals.css";
 
@@ -26,6 +26,25 @@ const spectral = Spectral({
 export const metadata: Metadata = {
   title: "Hifz Tester",
   description: "A quiet listening teacher for Quran memorization.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Hifz Tester",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#f6f2e9",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

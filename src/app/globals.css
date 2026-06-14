@@ -29,7 +29,7 @@ html, body {
 .wrap {
   max-width: 760px;
   margin: 0 auto;
-  padding: 56px 24px 96px;
+  padding: max(56px, env(safe-area-inset-top)) 24px max(96px, env(safe-area-inset-bottom));
 }
 
 .masthead { margin-bottom: 40px; }
@@ -312,6 +312,32 @@ summary { cursor: pointer; color: var(--ink-soft); font-family: var(--font-displ
 input[type="range"] { flex: 1; accent-color: var(--green); }
 
 .error { color: var(--flag); font-size: 0.95rem; margin-top: 10px; }
+
+.install-banner {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  animation: rise 0.3s ease;
+}
+.install-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.install-banner-content span {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.install-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 
 @media (max-width: 560px) {
   .row.range { grid-template-columns: 1fr; }

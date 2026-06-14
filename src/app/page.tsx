@@ -151,6 +151,72 @@ export default function Home() {
 
   const MAX_RECORD_SECONDS = 60;
 
+  // ── Install banner state ──────────────────────────────────────────
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<Event | null>(null);
+
+  useEffect(() => {
+    // Already installed as PWA?
+    const standalone =
+      (typeof window !== "undefined" && "standalone" in window.navigator && (window.navigator as any).standalone === true) ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    if (standalone) return;
+
+    // Dismissed before?
+    if (typeof window !== "undefined" && localStorage.getItem("hifz-install-dismissed") === "1") return;
+
+    // Mobile detection
+    const ua = navigator.userAgent;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) || window.innerWidth < 768;
+    if (!isMobile) return;
+
+    const ios = /iPad|iPhone|iPod/.test(ua) || (ua.includes("Mac") && "ontouchend" in document);
+    setIsIOS(ios);
+
+    if (ios) {
+      const t = setTimeout(() => setShowInstallBanner(true), 2000);
+      return () => clearTimeout(t);
+    }
+
+    // Android / Chrome: wait for beforeinstallprompt
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  async function handleInstallClick() {
+    if (isIOS) return;
+    if (!deferredPrompt) return;
+    const p = deferredPrompt as any;
+    p.prompt();
+    const { outcome } = await p.userChoice;
+    if (outcome === "accepted") setShowInstallBanner(false);
+    setDeferredPrompt(null);
+  }
+
+  async function handleShareClick() {
+    if (typeof navigator === "undefined" || !navigator.share) return;
+    try {
+      await navigator.share({
+        title: "Hifz Tester",
+        text: "Hifz Tester — a quiet listening teacher for Quran memorization.",
+        url: window.location.href,
+      });
+    } catch {
+      // User cancelled — ignore
+    }
+  }
+
+  function dismissInstallBanner() {
+    setShowInstallBanner(false);
+    localStorage.setItem("hifz-install-dismissed", "1");
+  }
+
   useEffect(() => {
     return () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -415,6 +481,32 @@ export default function Home() {
           )}
         </div>
       </header>
+
+      {showInstallBanner && (
+        <div className="install-banner">
+          <div className="install-banner-content">
+            <span>
+              {isIOS
+                ? "Install this app to your home screen"
+                : "Install this app for quick access from your home screen"}
+            </span>
+            <div className="install-banner-actions">
+              {isIOS ? (
+                <button className="btn-primary btn-sm" onClick={handleShareClick}>
+                  Share
+                </button>
+              ) : (
+                <button className="btn-primary btn-sm" onClick={handleInstallClick}>
+                  Install
+                </button>
+              )}
+              <button className="btn-ghost btn-sm" onClick={dismissInstallBanner}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <details>
         <summary>Tuning</summary>
