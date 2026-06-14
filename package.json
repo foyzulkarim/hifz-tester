@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n next,asr -c green,cyan \"next dev\" \"uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8766 --reload\"",
+    "dev:all": "concurrently -n next,asr -c green,cyan \"next dev\" \"uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8766 --reload\"",
+    "dev:next": "next dev",
+    "dev": "next dev",
+    "dev:asr": "uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765 --reload",
     "asr:start": "uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765",
     "build": "next build",
     "start": "concurrently -n next,asr -c green,cyan \"next start\" \"uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765\"",    

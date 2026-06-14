@@ -96,11 +96,30 @@ function AyahText({ text, notes }: { text: string; notes: AyahNote[] }) {
   );
 }
 
+function AyahSelect({
+  label, value, verseCount, previewText, onChange,
+}: {
+  label: string; value: number; verseCount: number; previewText?: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <label>{label}</label>
+      <select value={value} onChange={(e) => onChange(Number(e.target.value))}>
+        {Array.from({ length: verseCount }, (_, i) => i + 1).map((n) => (
+          <option key={n} value={n}>{n}</option>
+        ))}
+      </select>
+      {previewText && <div className="arabic boundary-ayah">{previewText}</div>}
+    </div>
+  );
+}
+
 export default function Home() {
   const [surahs, setSurahs] = useState<SurahInfo[]>([]);
   const [surah, setSurah] = useState(1);
   const [from, setFrom] = useState(1);
-  const [to, setTo] = useState(7);
+  const [to, setTo] = useState(1);
   const [threshold, setThreshold] = useState(0.5);
 
   const [recording, setRecording] = useState(false);
@@ -108,20 +127,18 @@ export default function Home() {
   const [transcribing, setTranscribing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [referenceVerses, setReferenceVerses] = useState<ReferenceVerse[]>([]);
-  // Hidden by default so the reciter can't peek at the text right before
-  // (or between) memorization attempts; revealing is a deliberate choice.
-  const [showReference, setShowReference] = useState(false);
   const [report, setReport] = useState<SessionReport | null>(null);
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordTime, setRecordTime] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const nextWord = report?.nextWord;
+  const [detectedRange, setDetectedRange] = useState<{ from: number; to: number } | null>(null);
+  const autoDetected = detectedRange !== null && from === detectedRange.from && to === detectedRange.to;
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const blobRef = useRef<Blob | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Each new recording bumps the generation so a stale in-flight
@@ -154,15 +171,11 @@ export default function Home() {
     }
   }, []);
 
-  const verseCount = useMemo(
-    () => surahs.find((s) => s.id === surah)?.verses ?? 7,
-    [surahs, surah],
-  );
-
   const currentSurah = useMemo(
     () => surahs.find((s) => s.id === surah),
     [surahs, surah],
   );
+  const verseCount = currentSurah?.verses ?? 1;
 
   useEffect(() => {
     fetch("/api/surahs")
@@ -199,10 +212,65 @@ export default function Home() {
   }, [surah, from, to, threshold]);
 
   function onSurahChange(id: number) {
-    const vc = surahs.find((s) => s.id === id)?.verses ?? 7;
     setSurah(id);
     setFrom(1);
-    setTo(Math.min(vc, 7));
+    setTo(1);
+    setDetectedRange(null);
+  }
+
+  async function detectRange(transcriptText: string) {
+    try {
+      const res = await fetch("/api/detect-range", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ surah, transcript: transcriptText }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      const { from: detectedFrom, to: detectedTo } = data as { from: number | null; to: number | null };
+      if (detectedFrom !== null && detectedTo !== null) {
+        setFrom(detectedFrom);
+        setTo(detectedTo);
+        setDetectedRange({ from: detectedFrom, to: detectedTo });
+      }
+    } catch {
+      // Silent fail — auto-detection is a convenience, not a hard requirement.
+    }
+  }
+
+  function runTranscription(blob: Blob) {
+    const gen = ++transcribeGenRef.current;
+    setTranscribing(true);
+    setError("");
+    transcribePromiseRef.current = (async (): Promise<string | null> => {
+      try {
+        const samples = await toMono16k(blob);
+        const text = await transcribeSamples(samples, gen);
+        if (transcribeGenRef.current !== gen) return null; // superseded
+        if (text !== null) {
+          if (text.trim()) {
+            setTranscript(text);
+            detectRange(text);
+          } else {
+            setError("Nothing was transcribed — the recording may be silent. Try again.");
+          }
+        }
+        return text;
+      } catch {
+        if (transcribeGenRef.current === gen) {
+          setError("Could not process the recording. Try again.");
+        }
+        return null;
+      } finally {
+        if (transcribeGenRef.current === gen) setTranscribing(false);
+      }
+    })();
+  }
+
+  function retryTranscription() {
+    if (!blobRef.current) return;
+    setTranscript("");
+    runTranscription(blobRef.current);
   }
 
   async function startRecording() {
@@ -210,7 +278,9 @@ export default function Home() {
     setReport(null);
     setTranscript("");
     setAudioUrl(null);
-    setShowReference(false); // re-hide the text for the new attempt
+    setFrom(1);
+    setTo(1);
+    setDetectedRange(null);
     transcribePromiseRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -220,33 +290,11 @@ export default function Home() {
       rec.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+        blobRef.current = blob;
         setAudioUrl(URL.createObjectURL(blob));
         // Auto-transcribe in the background while the user picks the range;
         // by the time they click "Check recitation" the transcript is ready.
-        const gen = ++transcribeGenRef.current;
-        setTranscribing(true);
-        transcribePromiseRef.current = (async (): Promise<string | null> => {
-          try {
-            const samples = await toMono16k(blob);
-            const text = await transcribeSamples(samples, gen);
-            if (transcribeGenRef.current !== gen) return null; // superseded
-            if (text !== null) {
-              if (text.trim()) {
-                setTranscript(text);
-              } else {
-                setError("Nothing was transcribed — the recording may be silent. Try again.");
-              }
-            }
-            return text;
-          } catch {
-            if (transcribeGenRef.current === gen) {
-              setError("Could not process the recording. Try again.");
-            }
-            return null;
-          } finally {
-            if (transcribeGenRef.current === gen) setTranscribing(false);
-          }
-        })();
+        runTranscription(blob);
       };
       rec.start();
       recorderRef.current = rec;
@@ -368,8 +416,34 @@ export default function Home() {
         </div>
       </header>
 
+      <details>
+        <summary>Tuning</summary>
+        <div className="adv panel">
+          <label>Match tolerance — {threshold.toFixed(2)}</label>
+          <div className="slider-row">
+            <input type="range" min={0.5} max={0.98} step={0.01} value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))} />
+          </div>
+          <p className="hint" style={{ marginTop: 10 }}>
+            Higher = stricter (more slips caught, more false alarms). Lower = more
+            forgiving of the recognizer mishearing a correct word. Tune on your own voice.
+          </p>
+        </div>
+      </details>
+
       {/* Step 1: record from memory -- nothing to peek at yet. */}
       <section className="panel stack">
+        <h2 className="card-title">1 — Record your recitation</h2>
+        <div>
+          <label>Surah</label>
+          <select value={surah} onChange={(e) => onSurahChange(Number(e.target.value))}>
+            {surahs.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.id}. {s.name} · {s.meaning}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="actions">
           {!recording ? (
             <button className="btn-rec" onClick={startRecording} disabled={busy}>
@@ -400,87 +474,42 @@ export default function Home() {
           </div>
         )}
 
-        {error && <div className="error">{error}</div>}
-      </section>
-
-      {/* Step 2: pick the range, see the actual Quran text, then check. */}
-      <section className="panel stack">
-        <div className="row range">
+        {error && (
           <div>
-            <label>Surah</label>
-            <select value={surah} onChange={(e) => onSurahChange(Number(e.target.value))}>
-              {surahs.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.id}. {s.name} · {s.meaning}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label>From ayah</label>
-            <select
-              value={from}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setFrom(v);
-                if (v > to) setTo(v);
-              }}
-            >
-              {Array.from({ length: verseCount }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label>To ayah</label>
-            <select
-              value={to}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setTo(v);
-                if (v < from) setFrom(v);
-              }}
-            >
-              {Array.from({ length: verseCount }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* The reference text (what SHOULD be recited). Collapsed by default
-            so reciting stays a memory test; gone once a report renders --
-            the report repeats these verses with mistakes marked. */}
-        {referenceVerses.length > 0 && !report && (
-          <div className="stack">
-            <div className="actions">
-              <label style={{ margin: 0 }}>
-                Actual Quran text — ayah {from}{to !== from ? `–${to}` : ""} (what should be recited)
-              </label>
-              <button
-                className="btn-ghost btn-sm"
-                onClick={() => setShowReference((s) => !s)}
-              >
-                {showReference ? "Hide text" : "Show text"}
+            <div className="error">{error}</div>
+            {audioUrl && !transcribing && (
+              <button className="btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={retryTranscription}>
+                Retry transcription
               </button>
-            </div>
-            {showReference ? (
-              referenceVerses.map((v) => (
-                <article key={v.ayah} className="ayah">
-                  <div className="ayah-head">Ayah {v.ayah}</div>
-                  <div className="arabic">{v.text}</div>
-                  {v.translation && (
-                    <div className="ayah-translation">{v.translation}</div>
-                  )}
-                </article>
-              ))
-            ) : (
-              <span className="hint">
-                Hidden so you recite from memory. Reveal only to double-check the range.
-              </span>
             )}
           </div>
         )}
+      </section>
+
+      {/* Step 2: confirm the range, then check. */}
+      <section className="panel stack">
+        <h2 className="card-title">2 — Verify range &amp; check</h2>
+        {autoDetected && (
+          <span className="hint auto-detected">
+            Range auto-detected from your recitation. Adjust below if needed.
+          </span>
+        )}
+
+        <AyahSelect
+          label="From ayah"
+          value={from}
+          verseCount={verseCount}
+          previewText={referenceVerses.find((v) => v.ayah === from)?.text}
+          onChange={(v) => { setFrom(v); if (v > to) setTo(v); }}
+        />
+
+        <AyahSelect
+          label="To ayah"
+          value={to}
+          verseCount={verseCount}
+          previewText={referenceVerses.find((v) => v.ayah === to)?.text}
+          onChange={(v) => { setTo(v); if (v < from) setFrom(v); }}
+        />
 
         <div className="actions">
           <button
@@ -521,6 +550,12 @@ export default function Home() {
                   Ayah {a.ayah} {a.clean ? "· clean" : "· needs review"}
                 </div>
                 <AyahText text={a.text} notes={a.notes} />
+                {a.heardText && (
+                  <div className="ayah-heard">
+                    <span className="ayah-heard-label">You recited:</span>
+                    <span className="ar ayah-heard-text">{a.heardText}</span>
+                  </div>
+                )}
                 {a.translation && (
                   <div className="ayah-translation">{a.translation}</div>
                 )}
@@ -544,46 +579,6 @@ export default function Home() {
           })}
         </section>
       )}
-
-      <details>
-        <summary>Stuck? Show next word (luqma)</summary>
-        <div className="adv panel">
-          {nextWord ? (
-            <div className="actions" style={{ flexWrap: "nowrap" }}>
-              <span className="hint">Next word:</span>
-              <span className="big-ar">{nextWord.text}</span>
-              {nextWord.transliteration && (
-                <span
-                  className="luqma-translit"
-                  dangerouslySetInnerHTML={{ __html: nextWord.transliteration }}
-                />
-              )}
-              <span className="hint">
-                Ayah {nextWord.ayah}, word {nextWord.wordIndex + 1}
-              </span>
-            </div>
-          ) : report ? (
-            <p className="hint">You reached the end of the selected range.</p>
-          ) : (
-            <p className="hint">Recite and check first — the next word appears here automatically.</p>
-          )}
-        </div>
-      </details>
-
-      <details>
-        <summary>Tuning</summary>
-        <div className="adv panel">
-          <label>Match tolerance — {threshold.toFixed(2)}</label>
-          <div className="slider-row">
-            <input type="range" min={0.5} max={0.98} step={0.01} value={threshold}
-              onChange={(e) => setThreshold(Number(e.target.value))} />
-          </div>
-          <p className="hint" style={{ marginTop: 10 }}>
-            Higher = stricter (more slips caught, more false alarms). Lower = more
-            forgiving of the recognizer mishearing a correct word. Tune on your own voice.
-          </p>
-        </div>
-      </details>
 
       {shareOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setShareOpen(false)}>

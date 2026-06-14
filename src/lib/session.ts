@@ -125,24 +125,26 @@ function groupByAyah(
       },
     ]),
   );
-
   let lastKey = order[0];
   for (const op of ops) {
+    const ar = byKey.get(lastKey)!;
     if (op.refIndex !== null) {
       const et = expected[op.refIndex];
       lastKey = `${et.surah}:${et.ayah}`;
+      const cur = byKey.get(lastKey)!;
       if (op.kind !== OpKind.MATCH) {
-        const ar = byKey.get(lastKey)!;
-        ar.clean = false;
-        ar.notes.push(noteFrom(op, et.wordIndex));
+        cur.clean = false;
+        cur.notes.push(noteFrom(op, et.wordIndex));
       }
+      if (op.heard !== null) cur.heardText = cur.heardText ? cur.heardText + " " + op.heard : op.heard;
     } else {
       // insertion: attach to the ayah of the preceding reference token
-      const ar = byKey.get(lastKey)!;
       ar.clean = false;
       ar.notes.push(noteFrom(op, null));
+      if (op.heard !== null) ar.heardText = ar.heardText ? ar.heardText + " " + op.heard : op.heard;
     }
   }
+
   return order.map((k) => byKey.get(k)!);
 }
 

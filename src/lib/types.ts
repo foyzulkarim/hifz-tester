@@ -13,6 +13,7 @@ export interface AyahResult {
   text: string; // original, for display
   clean: boolean;
   notes: AyahNote[];
+  heardText?: string; // ASR tokens attributed to this ayah
   translation?: string;
   transliteration?: string;
 }

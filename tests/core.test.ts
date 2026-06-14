@@ -12,6 +12,7 @@ import { normalizeText, tokenize } from "../src/lib/normalize";
 import { OpKind, align, hasMistake } from "../src/lib/align";
 import { evaluate, luqma } from "../src/lib/session";
 import { range, surahList, verse } from "../src/lib/quran";
+import { detectRange } from "../src/lib/detect-range";
 import { sanitizeTranslit } from "../src/lib/transliteration";
 
 const tests: Array<[string, () => void]> = [];
@@ -165,6 +166,53 @@ test("scripts/asr.py uses stride_length_s=2 to prevent turbo repetition loops", 
 test("scripts/asr_fastapi.py uses stride_length_s=2 to prevent turbo repetition loops", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "scripts", "asr_fastapi.py"), "utf-8");
   assert.match(src, /stride_length_s\s*=\s*2/);
+});
+
+// --- detect-range: auto-select from/to based on transcript ---
+test("detectRange finds exact full-surah recitation (Al-Fatihah)", () => {
+  const verses = range(1, 1, 7);
+  const transcript = verses.map((v) => v.text).join(" ");
+  const result = detectRange(1, transcript);
+  assert.equal(result.from, 1);
+  assert.equal(result.to, 7);
+});
+
+test("detectRange finds a single ayah recitation", () => {
+  const v = verse(1, 2);
+  const result = detectRange(1, v.text);
+  assert.equal(result.from, 2);
+  assert.equal(result.to, 2);
+});
+
+test("detectRange finds a partial range within a surah", () => {
+  const verses = range(1, 3, 5);
+  const transcript = verses.map((v) => v.text).join(" ");
+  const result = detectRange(1, transcript);
+  assert.equal(result.from, 3);
+  assert.equal(result.to, 5);
+});
+
+test("detectRange handles diacritics in transcript", () => {
+  const verses = range(1, 1, 3);
+  // Strip diacritics from the transcript to simulate ASR output
+  const transcript = verses.map((v) => normalizeText(v.text)).join(" ");
+  const result = detectRange(1, transcript);
+  assert.equal(result.from, 1);
+  assert.equal(result.to, 3);
+});
+
+test("detectRange returns null for empty transcript", () => {
+  const result = detectRange(1, "");
+  assert.equal(result.from, null);
+  assert.equal(result.to, null);
+});
+
+test("detectRange works for a longer surah (An-Naba 78:1-14)", () => {
+  const verses = range(78, 1, 14);
+  const transcript = verses.map((v) => v.text).join(" ");
+  const result = detectRange(78, transcript);
+  assert.equal(result.from, 1);
+  assert.equal(result.to, 14);
 });
 
 // --- runner ---
