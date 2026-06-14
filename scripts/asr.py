@@ -20,8 +20,12 @@ from transformers import pipeline
 
 MODEL_ID = sys.argv[1] if len(sys.argv) > 1 else "tarteel-ai/whisper-base-ar-quran"
 
-# Use MPS on Apple Silicon when available (e.g. Mac M4 Pro), otherwise auto.
-_device = "mps" if torch.backends.mps.is_available() else "cpu"
+# Prefer CUDA (Linux/NVIDIA), then MPS (Apple Silicon), then CPU.
+_device = (
+    "cuda" if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available()
+    else "cpu"
+)
 
 # Load once — this is the slow part.
 asr = pipeline("automatic-speech-recognition", model=MODEL_ID, device=_device)

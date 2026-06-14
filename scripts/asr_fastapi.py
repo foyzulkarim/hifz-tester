@@ -35,10 +35,13 @@ MODEL_ID = os.environ.get(
 )
 SAMPLE_RATE = 16000
 
-# Use MPS on Apple Silicon (M1/M2/M3/M4) when available, otherwise CPU.
-# Hard-coding "mps" would crash on Intel/Linux. The current scripts/asr.py
-# uses the same conditional — keep them in sync if you change one.
-_device = "mps" if torch.backends.mps.is_available() else "cpu"
+# Prefer CUDA (Linux/NVIDIA), then MPS (Apple Silicon), then CPU.
+# The current scripts/asr.py uses the same conditional — keep them in sync.
+_device = (
+    "cuda" if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available()
+    else "cpu"
+)
 
 # Load once — this is the slow part. Subsequent /transcribe calls reuse it.
 pipe = pipeline("automatic-speech-recognition", model=MODEL_ID, device=_device)
