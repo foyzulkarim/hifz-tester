@@ -15,10 +15,14 @@
  * a temp file and figures the format out.
  */
 
-const URL = process.env.HIFZ_ASR_FASTAPI_URL ?? "http://127.0.0.1:8765/transcribe";
+const DEFAULT_URL = "http://192.168.4.28:8765/transcribe";
 const TIMEOUT_MS = 60_000;
 
 export async function transcribe(samples: Float32Array): Promise<string> {
+  // Read env var at runtime, not build time, so production can override
+  // via environment without re-bundling.
+  const url = process.env.HIFZ_ASR_FASTAPI_URL ?? DEFAULT_URL;
+
   // Float32Array may be a view; copy the bytes into a fresh ArrayBuffer-backed
   // Uint8Array so the Blob/BodyInit types are happy. The intermediate copy is
   // a few ms at most for the audio sizes we deal with.
@@ -26,7 +30,7 @@ export async function transcribe(samples: Float32Array): Promise<string> {
   copy.set(new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength));
   const body = new Blob([copy], { type: "application/octet-stream" });
 
-  const res = await fetch(URL, {
+  const res = await fetch(url, {
     method: "POST",
     body,
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -35,7 +39,7 @@ export async function transcribe(samples: Float32Array): Promise<string> {
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     throw new Error(
-      `ASR (fastapi) HTTP ${res.status} from ${URL}: ${errText || res.statusText}`,
+      `ASR (fastapi) HTTP ${res.status} from ${url}: ${errText || res.statusText}`,
     );
   }
 

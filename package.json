@@ -5,7 +5,7 @@
   "scripts": {
     "dev:all": "HIFZ_ASR_FASTAPI_URL=http://192.168.4.28:8765/transcribe next dev",
     "dev:next": "next dev",
-    "dev": "next dev",
+    "dev": "HIFZ_ASR_FASTAPI_URL=http://192.168.4.28:8765/transcribe next dev",
     "dev:asr": "uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765 --reload",
     "asr:start": "uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765",
     "build": "next build",
