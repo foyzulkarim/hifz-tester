@@ -13,41 +13,64 @@
  * Wire format: raw octet-stream body, identical to what /api/check sends
  * to the stdio worker. The Whisper pipeline accepts a body of bytes via
  * a temp file and figures the format out.
+ *
+ * Uses node:http directly to bypass Next.js's production fetch patching,
+ * which was returning EHOSTUNREACH for LAN IPs in the service context.
  */
 
-const DEFAULT_URL = "http://192.168.4.28:8765/transcribe";
+import http from "node:http";
+
+const DEFAULT_URL = "http://127.0.0.1:8765/transcribe";
 const TIMEOUT_MS = 60_000;
 
 export async function transcribe(samples: Float32Array): Promise<string> {
-  // Read env var at runtime, not build time, so production can override
-  // via environment without re-bundling.
+  // Read env var at runtime so production can override without re-bundling.
   const url = process.env.HIFZ_ASR_FASTAPI_URL ?? DEFAULT_URL;
 
-  // Float32Array may be a view; copy the bytes into a fresh ArrayBuffer-backed
-  // Uint8Array so the Blob/BodyInit types are happy. The intermediate copy is
-  // a few ms at most for the audio sizes we deal with.
   const copy = new Uint8Array(samples.byteLength);
   copy.set(new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength));
-  const body = new Blob([copy], { type: "application/octet-stream" });
 
-  const res = await fetch(url, {
-    method: "POST",
-    body,
-    // cache: 'no-store' opts out of Next.js's production fetch instrumentation,
-    // which can drop large binary POST bodies when its caching layer intercepts.
-    cache: "no-store",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  const parsed = new URL(url);
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(
-      `ASR (fastapi) HTTP ${res.status} from ${url}: ${errText || res.statusText}`,
+  return new Promise<string>((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: parsed.hostname,
+        port: Number(parsed.port) || 80,
+        path: parsed.pathname,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": copy.byteLength,
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          const body = Buffer.concat(chunks).toString("utf8");
+          if (res.statusCode !== 200) {
+            reject(new Error(`ASR (fastapi) HTTP ${res.statusCode} from ${url}: ${body}`));
+            return;
+          }
+          try {
+            const data = JSON.parse(body) as { text?: string };
+            resolve((data.text ?? "").trim());
+          } catch {
+            reject(new Error(`ASR (fastapi) invalid JSON from ${url}: ${body}`));
+          }
+        });
+      },
     );
-  }
 
-  const data = (await res.json()) as { text?: string };
-  return (data.text ?? "").trim();
+    req.setTimeout(TIMEOUT_MS, () => {
+      req.destroy(new Error(`ASR (fastapi) timeout after ${TIMEOUT_MS}ms from ${url}`));
+    });
+
+    req.on("error", reject);
+    req.write(copy);
+    req.end();
+  });
 }
 
 export const activeBackend = "fastapi" as const;
