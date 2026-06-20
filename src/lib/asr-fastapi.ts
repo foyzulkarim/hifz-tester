@@ -33,6 +33,9 @@ export async function transcribe(samples: Float32Array): Promise<string> {
   const res = await fetch(url, {
     method: "POST",
     body,
+    // cache: 'no-store' opts out of Next.js's production fetch instrumentation,
+    // which can drop large binary POST bodies when its caching layer intercepts.
+    cache: "no-store",
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 

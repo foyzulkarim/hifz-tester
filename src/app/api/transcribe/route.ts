@@ -25,14 +25,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ transcript });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const cause = e instanceof Error && (e as NodeJS.ErrnoException).cause;
+    console.error("[transcribe] ASR error:", msg, cause ?? "");
     return NextResponse.json(
-      {
-        error:
-          "Transcription failed. Is the FastAPI ASR worker running on " +
-          "http://127.0.0.1:8765? Start it with `uvicorn scripts.asr_fastapi:app " +
-          "--host 127.0.0.1 --port 8765` or use `npm run dev`. Details: " +
-          msg,
-      },
+      { error: "Speech recognition is temporarily unavailable. Please try again." },
       { status: 500 },
     );
   }

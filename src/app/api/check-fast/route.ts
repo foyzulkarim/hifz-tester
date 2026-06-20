@@ -11,13 +11,8 @@ export const maxDuration = 120; // ASR on a large model can take a while
  * Returns: SessionReport JSON.
  *
  * Sibling of /api/check; uses the FastAPI worker (scripts/asr_fastapi.py)
- * running on http://127.0.0.1:8765 instead of the stdio NDJSON worker in
- * scripts/asr.py. Wire format and report shape are identical so the
- * client can swap routes without changes.
- *
- * Pre-flight: make sure the FastAPI worker is up:
- *   uvicorn scripts.asr_fastapi:app --host 127.0.0.1 --port 8765
- * or use `npm run dev` (the script in package.json runs both processes).
+ * instead of the stdio NDJSON worker in scripts/asr.py. Wire format and
+ * report shape are identical so the client can swap routes without changes.
  */
 export async function POST(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -44,14 +39,9 @@ export async function POST(req: NextRequest) {
     transcript = await transcribe(samples);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[check-fast] ASR error:", msg);
     return NextResponse.json(
-      {
-        error:
-          "Transcription failed. Is the FastAPI ASR worker running on " +
-          "http://127.0.0.1:8765? Start it with `uvicorn scripts.asr_fastapi:app " +
-          "--host 127.0.0.1 --port 8765` or use `npm run dev`. Details: " +
-          msg,
-      },
+      { error: "Speech recognition is temporarily unavailable. Please try again." },
       { status: 500 },
     );
   }
